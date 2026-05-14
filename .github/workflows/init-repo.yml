@@ -1,0 +1,47 @@
+name: Initialize Repository (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch name to push to'
+        required: false
+        default: 'main'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  initialize:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      - name: Ensure branch exists
+        run: |
+          if ! git show-branch ${{ inputs.branch }} >/dev/null 2>&1; then
+            echo "Creating branch: ${{ inputs.branch }}"
+            git checkout -b ${{ inputs.branch }}
+          else
+            echo "Branch ${{ inputs.branch }} already exists"
+          fi
+
+      - name: Push to branch
+        run: |
+          git push origin ${{ inputs.branch }} -f
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "✅ Repository initialized on branch: ${{ inputs.branch }}"
+          echo "📦 Image builds to: ghcr.io/${{ github.repository }}"
+          echo "🐳 Deploy with: docker-compose up -d"

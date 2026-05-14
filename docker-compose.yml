@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  egghead:
+    image: ghcr.io/kukaraf/egghead_service:latest
+    container_name: egghead_service
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: sqlite:./data/egghead.db
+      LISTEN_ADDR: 0.0.0.0:3000
+      ENV: DEVELOPMENT
+
+      # OIDC Configuration (auth.osmosis.page)
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-https://auth.osmosis.page/application/o/egghead/}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-https://egghead.osmosis.page/auth/callback}
+
+      # KV Store Configuration (secrets)
+      KV_API_KEY: ${KV_API_KEY}
+      KV_URL: ${KV_URL:-https://kv.osmosis.page}
+
+      # Session Configuration
+      SESSION_SIGNING_KEY: ${SESSION_SIGNING_KEY}
+      BASE_URL: ${BASE_URL:-http://localhost:3000}
+
+      # Worker Configuration
+      WORKER_POLL_INTERVAL_SECS: ${WORKER_POLL_INTERVAL_SECS:-5}
+      MAX_HTML_BYTES: ${MAX_HTML_BYTES:-150000}
+
+      # Logging
+      LOG_FORMAT: ${LOG_FORMAT:-}
+    volumes:
+      - egghead_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  egghead_data:
+    driver: local

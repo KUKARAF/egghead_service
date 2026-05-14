@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  egghead:
+    image: ghcr.io/kukaraf/egghead_service:latest
+    container_name: egghead_service
+    restart: unless-stopped
+
+    # Environment from .env file (secrets)
+    env_file: .env
+
+    # Public/shared config (no secrets here)
+    environment:
+      DATABASE_URL: sqlite:./data/egghead.db
+      LISTEN_ADDR: 0.0.0.0:3000
+      BASE_URL: https://userscripts.osmosis.page
+      OIDC_ISSUER_URL: https://auth.osmosis.page/application/o/egghead/
+      KV_URL: https://kv.osmosis.page
+      WORKER_POLL_INTERVAL_SECS: "5"
+      MAX_HTML_BYTES: "150000"
+      LOG_FORMAT: "json"
+
+    # Port exposed only to local network (Caddy reverse proxy)
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    # Persistent SQLite database
+    volumes:
+      - egghead_data:/app/data
+
+    # Health check for orchestration
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+volumes:
+  egghead_data:
+    driver: local
