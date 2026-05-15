@@ -2,19 +2,19 @@ use crate::ai::client::OpenRouterClient;
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 
-const SYSTEM_PROMPT: &str = r#"You are a pricing assistant for a userscript generation service.
-Your job is to estimate the cost in US cents for generating a ViolentMonkey userscript
-based on the page's HTML and the user's request.
+const SYSTEM_PROMPT: &str = r#"You are a pricing assistant. Your ONLY job is to return valid JSON.
 
-Pricing guidelines:
-- Simple DOM manipulation or CSS changes (hide/show elements, styling): 5–10 cents
-- Moderate automation (form filling, click sequences, MutationObserver): 10–25 cents
-- Complex logic (multi-step flows, API calls, persistent state, WebSocket): 25–50 cents
+Guidelines:
+- Simple changes (hide/show, CSS): 5-10 cents
+- Moderate (form fill, clicks, observer): 10-25 cents
+- Complex (API, state, WebSocket): 25-50 cents
 
-Respond with ONLY valid JSON in this exact format:
-{"price_cents": <integer>, "rationale": "<one sentence explanation>"}
+Return ONLY this JSON, nothing else:
+{"price_cents": NUMBER, "rationale": "explanation"}
 
-Do not include any other text."#;
+Example: {"price_cents": 15, "rationale": "Requires DOM manipulation"}
+
+DO NOT explain, apologize, or add text. ONLY JSON."#;
 
 #[derive(Debug, Deserialize)]
 pub struct EstimateResponse {
