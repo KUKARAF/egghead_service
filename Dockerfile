@@ -1,4 +1,4 @@
-# Build stage - use latest Rust with bullseye for glibc compatibility
+# Build stage - use latest Rust
 FROM rust:latest AS builder
 
 WORKDIR /build
@@ -18,12 +18,13 @@ ENV VERSION=$VERSION
 # Build for release
 RUN cargo build --release
 
-# Runtime stage - use latest Debian slim for glibc compatibility
-FROM debian:bookworm-slim
+# Runtime stage - use Ubuntu 24.04 for GLIBC_2.39 compatibility
+FROM ubuntu:24.04
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     sqlite3 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
