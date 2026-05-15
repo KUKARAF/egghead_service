@@ -95,12 +95,13 @@ async fn run_estimation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
              updated_at = datetime('now')
          WHERE id = ?"
     )
-    .bind(resp.price_cents)
+    .bind(resp.total_price_cents)
     .bind(&resp.rationale)
     .bind(task_id)
     .execute(&state.pool)
     .await?;
 
-    tracing::info!(task_id = %task_id, price_cents = resp.price_cents, "estimation complete");
+    let price_usd = resp.total_price_cents as f64 / 100.0;
+    tracing::info!(task_id = %task_id, min_hours = resp.min_hours, max_hours = resp.max_hours, price = format!("${:.2}", price_usd), "estimation complete");
     Ok(())
 }
