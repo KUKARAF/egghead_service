@@ -3,20 +3,20 @@ use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use serde_json::json;
 
-const SYSTEM_PROMPT: &str = r#"You are a pricing assistant for userscript development. Estimate based on human developer hours at $50/hour (~833 cents/hour).
+const SYSTEM_PROMPT: &str = r#"You are a pricing assistant for userscript development. Estimate based on human developer hours at 200 PLN/hour.
 
 Complexity levels:
-- Simple (hide/show, CSS tweaks): 0.5-1 hour = $25-50 = 2500-5000 cents
-- Moderate (form fill, clicks, observer): 1-3 hours = $50-150 = 5000-15000 cents
-- Complex (API calls, state, WebSocket): 3-8 hours = $150-400 = 15000-40000 cents
+- Simple (hide/show, CSS tweaks): 0.5-1 hour = 100-200 PLN
+- Moderate (form fill, clicks, observer): 1-3 hours = 200-600 PLN
+- Complex (API calls, state, WebSocket): 3-8 hours = 600-1600 PLN
 
-Return JSON with min_hours, max_hours, total_price_cents, and rationale."#;
+Return JSON with min_hours, max_hours, total_price_pln (whole number), and rationale."#;
 
 #[derive(Debug, Deserialize)]
 pub struct EstimateResponse {
     pub min_hours: f64,
     pub max_hours: f64,
-    pub total_price_cents: i64,
+    pub total_price_pln: i64,
     pub rationale: String,
 }
 
@@ -41,10 +41,10 @@ pub async fn call_estimate(
         "properties": {
             "min_hours": {"type": "number", "description": "Minimum estimated hours"},
             "max_hours": {"type": "number", "description": "Maximum estimated hours"},
-            "total_price_cents": {"type": "integer", "description": "Total price in cents"},
+            "total_price_pln": {"type": "integer", "description": "Total price in Polish zloty"},
             "rationale": {"type": "string", "description": "Brief explanation of the estimate"}
         },
-        "required": ["min_hours", "max_hours", "total_price_cents", "rationale"],
+        "required": ["min_hours", "max_hours", "total_price_pln", "rationale"],
         "additionalProperties": false
     });
 
@@ -55,10 +55,10 @@ pub async fn call_estimate(
     let resp: EstimateResponse =
         serde_json::from_str(&text).context(format!("failed to parse estimate JSON from AI response: '{}'", text))?;
 
-    if resp.total_price_cents < 0 || resp.total_price_cents > 100_000 {
+    if resp.total_price_pln < 0 || resp.total_price_pln > 10_000 {
         return Err(anyhow!(
-            "total_price_cents out of acceptable range: {}",
-            resp.total_price_cents
+            "total_price_pln out of acceptable range: {}",
+            resp.total_price_pln
         ));
     }
 
