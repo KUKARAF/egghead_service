@@ -1,22 +1,16 @@
 use crate::ai::client::OpenRouterClient;
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
+use serde_json::json;
 
-const SYSTEM_PROMPT: &str = r#"IMPORTANT: You must respond with ONLY valid JSON. No explanations, no code, no markdown. Only JSON.
+const SYSTEM_PROMPT: &str = r#"You are a pricing assistant for userscript development. Estimate based on human developer hours at $50/hour (~833 cents/hour).
 
-You are a pricing assistant for userscript development. Estimate the complexity of a userscript task based on the user's request, page HTML, and any source files.
+Complexity levels:
+- Simple (hide/show, CSS tweaks): 0.5-1 hour = $25-50 = 2500-5000 cents
+- Moderate (form fill, clicks, observer): 1-3 hours = $50-150 = 5000-15000 cents
+- Complex (API calls, state, WebSocket): 3-8 hours = $150-400 = 15000-40000 cents
 
-Pricing: $50/hour developer rate (~833 cents per hour)
-
-Complexity guidelines:
-- Simple (CSS tweaks, hide/show elements): 0.5-1 hours = $25-50 = 2500-5000 cents
-- Moderate (form interactions, event listeners): 1-3 hours = $50-150 = 5000-15000 cents
-- Complex (API calls, state management, WebSocket): 3-8 hours = $150-400 = 15000-40000 cents
-
-Your response must be ONLY this JSON structure, nothing else:
-{"min_hours": NUMBER, "max_hours": NUMBER, "total_price_cents": NUMBER, "rationale": "brief explanation"}
-
-Example valid response: {"min_hours": 1, "max_hours": 2, "total_price_cents": 8333, "rationale": "DOM manipulation with CSS"}"#;
+Return JSON with min_hours, max_hours, total_price_cents, and rationale."#;
 
 #[derive(Debug, Deserialize)]
 pub struct EstimateResponse {
@@ -42,20 +36,24 @@ pub async fn call_estimate(
         user_message.push_str(files);
     }
 
-    let text = client.complete(SYSTEM_PROMPT, &user_message, 256).await?;
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "min_hours": {"type": "number", "description": "Minimum estimated hours"},
+            "max_hours": {"type": "number", "description": "Maximum estimated hours"},
+            "total_price_cents": {"type": "integer", "description": "Total price in cents"},
+            "rationale": {"type": "string", "description": "Brief explanation of the estimate"}
+        },
+        "required": ["min_hours", "max_hours", "total_price_cents", "rationale"],
+        "additionalProperties": false
+    });
+
+    let text = client.complete_with_schema(SYSTEM_PROMPT, &user_message, 256, schema, "EstimateResponse").await?;
 
     tracing::warn!("Estimate response from OpenRouter: {}", text);
 
-    // Strip markdown code fences if present (for models that wrap JSON)
-    let json_str = text
-        .trim()
-        .trim_start_matches("```json")
-        .trim_start_matches("```")
-        .trim_end_matches("```")
-        .trim();
-
     let resp: EstimateResponse =
-        serde_json::from_str(json_str).context(format!("failed to parse estimate JSON from AI response: '{}'", json_str))?;
+        serde_json::from_str(&text).context(format!("failed to parse estimate JSON from AI response: '{}'", text))?;
 
     if resp.total_price_cents < 0 || resp.total_price_cents > 100_000 {
         return Err(anyhow!(
