@@ -9,6 +9,11 @@ COPY Cargo.toml Cargo.lock* ./
 # Copy source tree
 COPY src ./src
 COPY migrations ./migrations
+COPY build.rs ./
+
+# Get git commit SHA for version (or use "main" if not available)
+ARG VERSION=main
+ENV VERSION=$VERSION
 
 # Build for release
 RUN cargo build --release
