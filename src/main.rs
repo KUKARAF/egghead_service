@@ -71,6 +71,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/health", get(health))
         .route("/healthz", get(healthz))
+        .route("/version", get(version))
         .nest("/auth", auth::router())
         .nest("/api", api::router())
         .nest("/", frontend::router())
@@ -95,6 +96,10 @@ async fn main() -> Result<()> {
 
 async fn health() -> &'static str {
     "ok"
+}
+
+async fn version() -> &'static str {
+    env!("APP_VERSION")
 }
 
 async fn healthz(
