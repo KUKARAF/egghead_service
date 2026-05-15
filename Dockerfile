@@ -1,5 +1,5 @@
-# Build stage - use bullseye-slim for glibc 2.31 compatibility
-FROM rust:1.75-bullseye AS builder
+# Build stage - use latest Rust with bullseye for glibc compatibility
+FROM rust:latest AS builder
 
 WORKDIR /build
 
@@ -18,8 +18,8 @@ ENV VERSION=$VERSION
 # Build for release
 RUN cargo build --release
 
-# Runtime stage - use bullseye-slim for matching glibc
-FROM debian:bullseye-slim
+# Runtime stage - use latest Debian slim for glibc compatibility
+FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
