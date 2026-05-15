@@ -47,7 +47,7 @@ impl<'a> OpenRouterClient<'a> {
         max_tokens: u32,
     ) -> Result<String> {
         let body = RequestBody {
-            model: "google/gemma-2-9b-it".to_string(),
+            model: "google/gemma-4-31b-it".to_string(),
             max_tokens,
             system: system.to_string(),
             messages: vec![Message {
