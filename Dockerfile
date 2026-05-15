@@ -1,5 +1,5 @@
-# Build stage - use bookworm to match runtime glibc
-FROM rust:1.81-bookworm AS builder
+# Build stage - use 1.75-slim for stable glibc compatibility
+FROM rust:1.75-slim AS builder
 
 WORKDIR /build
 
@@ -19,7 +19,7 @@ ENV VERSION=$VERSION
 RUN cargo build --release
 
 # Runtime stage
-FROM debian:bookworm
+FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
