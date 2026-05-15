@@ -78,6 +78,16 @@ malpa (polls GET /api/tasks/:id)
     ↓ saves locally + registers in browser
 ```
 
+## Setup OIDC
+
+Before deploying, register egghead_service with your OIDC provider (auth.osmosis.page):
+
+1. Create a new OIDC client
+2. Set the **Redirect URI** to: `https://<your-domain>/auth/callback`
+   - For local dev: `http://localhost:3000/auth/callback`
+   - For production (userscripts.osmosis.page): `https://userscripts.osmosis.page/auth/callback`
+3. Copy the client ID and secret to your `.env` file
+
 ## Configuration
 
 **Required Environment Variables:**
@@ -85,7 +95,8 @@ malpa (polls GET /api/tasks/:id)
 DATABASE_URL                 # sqlite:./egghead.db
 OIDC_CLIENT_ID              # from auth.osmosis.page
 OIDC_CLIENT_SECRET          # from auth.osmosis.page
-KV_API_KEY                  # API key for kv.osmosis.page (for OpenRouter secret)
+OIDC_REDIRECT_URI           # https://<your-domain>/auth/callback
+KV_API_KEY                  # API key for kv.osmosis.page
 ```
 
 **Optional:**
@@ -131,20 +142,58 @@ See `.env.example` and `.env.docker` for full examples.
 
 ## Deployment
 
-### Docker (Production)
+### Quick Start (Local)
 
 ```bash
-docker-compose -f docker-compose.yml up -d
+docker-compose up -d
+curl http://localhost:3000/health
 ```
 
-With a reverse proxy (e.g., Caddy):
+### Production (Remote Server)
+
+For detailed setup with external Caddy reverse proxy, see **DEPLOY_REMOTE.md**.
+
+Quick summary:
+```bash
+# On remote server
+mkdir -p ~/env/osmosis/userscripts/data
+cd ~/env/osmosis/userscripts
+
+# Copy files (via scp or git)
+git clone https://github.com/KUKARAF/egghead_service.git .
+cp .env.prod.example .env
+
+# Fill in secrets (.env)
+nano .env
+# Required:
+#   OIDC_CLIENT_ID
+#   OIDC_CLIENT_SECRET
+#   KV_API_KEY (for EXTENSION_OPENROUTER_API)
+#   SESSION_SIGNING_KEY (or auto-generate: openssl rand -hex 32)
+
+# Start service
+docker-compose -f docker-compose.prod.yml up -d
+
+# Verify
+curl http://localhost:3000/health
 ```
-egghead.osmosis.page {
-  reverse_proxy localhost:3000
+
+### With Caddy Reverse Proxy
+
+On your Caddy instance:
+```
+userscripts.osmosis.page {
+  reverse_proxy 127.0.0.1:3000 {
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto https
+  }
 }
 ```
 
-See **DEPLOY.md** for detailed production setup.
+Then reload: `caddy reload`
+
+See **DEPLOY.md** for detailed troubleshooting and backup procedures.
 
 ### GitHub Actions
 
@@ -226,10 +275,12 @@ cargo sqlx migrate add -r migration_name
 - **Backend:** Rust + Axum 0.7
 - **Database:** SQLite with sqlx
 - **Auth:** OIDC (auth.osmosis.page) + sessions
-- **AI:** OpenRouter (Claude 3.5 Haiku)
-- **Secrets:** kv.osmosis.page
+- **AI:** OpenRouter (Claude 3.5 Haiku) — API key fetched from kv.osmosis.page
+  - KV Key: `EXTENSION_OPENROUTER_API`
+  - Fetched on each task (allows key rotation without redeployment)
+- **Secrets:** kv.osmosis.page (runtime secret fetching)
 - **Container:** Docker + Docker Compose
-- **CI/CD:** GitHub Actions
+- **CI/CD:** GitHub Actions → ghcr.io
 
 ## Related Projects
 
