@@ -72,10 +72,15 @@ impl<'a> OpenRouterClient<'a> {
             return Err(anyhow!("OpenRouter API error {status}: {text}"));
         }
 
-        let response: ResponseBody = resp
-            .json()
+        let text = resp
+            .text()
             .await
-            .context("failed to parse OpenRouter response")?;
+            .context("failed to read OpenRouter response")?;
+
+        tracing::debug!("OpenRouter response: {}", text);
+
+        let response: ResponseBody = serde_json::from_str(&text)
+            .context(format!("failed to parse OpenRouter response: {}", text))?;
 
         response
             .choices
