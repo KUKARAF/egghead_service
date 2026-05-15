@@ -41,9 +41,15 @@ services:
       retries: 3
       start_period: 40s
 
-    # Logging
+    # Logging to Loki
     logging:
-      driver: "json-file"
+      driver: loki
       options:
+        loki-url: "http://192.168.1.66:3100/loki/api/v1/push"
+        loki-external-labels: "service=egghead,compose_service=egghead"
+        loki-pipeline-stages: |
+          - json: {}
+          - timestamp:
+              source: timestamp
+              format: RFC3339Nano
         max-size: "100m"
-        max-file: "10"
