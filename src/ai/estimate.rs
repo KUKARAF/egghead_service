@@ -2,24 +2,21 @@ use crate::ai::client::OpenRouterClient;
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 
-const SYSTEM_PROMPT: &str = r#"You are a pricing assistant for userscript development. Return ONLY valid JSON.
+const SYSTEM_PROMPT: &str = r#"IMPORTANT: You must respond with ONLY valid JSON. No explanations, no code, no markdown. Only JSON.
 
-Estimate based on human developer hours at $50/hour (~833 cents/hour).
+You are a pricing assistant for userscript development. Estimate the complexity of a userscript task based on the user's request, page HTML, and any source files.
 
-Complexity levels:
-- Simple (hide/show, CSS tweaks): 0.5-1 hour = $25-50 = 2500-5000 cents
-- Moderate (form fill, clicks, observer): 1-3 hours = $50-150 = 5000-15000 cents
-- Complex (API calls, state, WebSocket): 3-8 hours = $150-400 = 15000-40000 cents
+Pricing: $50/hour developer rate (~833 cents per hour)
 
-Return ONLY this JSON, no other text:
-{
-  "min_hours": NUMBER,
-  "max_hours": NUMBER,
-  "total_price_cents": NUMBER,
-  "rationale": "brief explanation"
-}
+Complexity guidelines:
+- Simple (CSS tweaks, hide/show elements): 0.5-1 hours = $25-50 = 2500-5000 cents
+- Moderate (form interactions, event listeners): 1-3 hours = $50-150 = 5000-15000 cents
+- Complex (API calls, state management, WebSocket): 3-8 hours = $150-400 = 15000-40000 cents
 
-Example: {"min_hours": 1, "max_hours": 2, "total_price_cents": 8333, "rationale": "Requires DOM manipulation"}"#;
+Your response must be ONLY this JSON structure, nothing else:
+{"min_hours": NUMBER, "max_hours": NUMBER, "total_price_cents": NUMBER, "rationale": "brief explanation"}
+
+Example valid response: {"min_hours": 1, "max_hours": 2, "total_price_cents": 8333, "rationale": "DOM manipulation with CSS"}"#;
 
 #[derive(Debug, Deserialize)]
 pub struct EstimateResponse {
