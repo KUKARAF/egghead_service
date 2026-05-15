@@ -40,6 +40,8 @@ pub async fn call_estimate(
 
     let text = client.complete(SYSTEM_PROMPT, &user_message, 256).await?;
 
+    tracing::warn!("Estimate response from OpenRouter: {}", text);
+
     // Strip markdown code fences if present
     let json_str = text
         .trim()
@@ -49,7 +51,7 @@ pub async fn call_estimate(
         .trim();
 
     let resp: EstimateResponse =
-        serde_json::from_str(json_str).context("failed to parse estimate JSON from AI response")?;
+        serde_json::from_str(json_str).context(format!("failed to parse estimate JSON from AI response: '{}'", json_str))?;
 
     if resp.price_cents < 0 || resp.price_cents > 10_000 {
         return Err(anyhow!(

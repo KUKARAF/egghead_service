@@ -8,6 +8,8 @@ pub async fn fetch_openrouter_key(
 ) -> Result<String> {
     let url = format!("{kv_url}/kv/EXTENSION_OPENROUTER_API");
 
+    tracing::info!("Fetching OpenRouter key from: {}", url);
+
     let resp = http
         .get(&url)
         .header("X-Api-Key", kv_api_key)
@@ -16,10 +18,13 @@ pub async fn fetch_openrouter_key(
         .context("failed to fetch OpenRouter key from KV")?;
 
     if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        tracing::error!("KV fetch failed: {} {}", status, text);
         return Err(anyhow!(
             "KV fetch failed: {} {}",
-            resp.status(),
-            resp.text().await.unwrap_or_default()
+            status,
+            text
         ));
     }
 
@@ -31,8 +36,10 @@ pub async fn fetch_openrouter_key(
         .to_string();
 
     if key.is_empty() {
+        tracing::error!("EXTENSION_OPENROUTER_API key is empty in KV");
         return Err(anyhow!("EXTENSION_OPENROUTER_API key is empty in KV"));
     }
 
+    tracing::info!("Successfully fetched OpenRouter key (length: {})", key.len());
     Ok(key)
 }
