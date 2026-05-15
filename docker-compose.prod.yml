@@ -24,6 +24,10 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
 
+    # DNS configuration (AdGuard with DNS rewrite for *.osmosis.page)
+    dns:
+      - 192.168.1.66
+
     # Persistent SQLite database
     volumes:
       - egghead_data:/app/data
