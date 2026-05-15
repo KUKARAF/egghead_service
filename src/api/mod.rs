@@ -13,6 +13,7 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/tasks", post(tasks::create_task))
         .route("/tasks/:id", get(tasks::get_task))
+        .route("/tasks/status/:token", get(tasks::get_task_by_token))
         .route("/me/tasks", get(me::list_tasks))
         .route("/me/tasks/:id", get(me::get_task_detail))
         .route("/me/tasks/:id/approve", post(me::approve_task))

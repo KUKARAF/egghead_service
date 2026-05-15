@@ -27,6 +27,7 @@ pub struct CreateTaskRequest {
 pub struct CreateTaskResponse {
     pub id: String,
     pub status: String,
+    pub submission_token: String,
 }
 
 #[utoipa::path(
@@ -61,11 +62,12 @@ pub async fn create_task(
     }
 
     let task_id = Uuid::new_v4().to_string();
+    let submission_token = format!("task_{}", Uuid::new_v4().to_string());
     let files_json = req.files.as_ref().map(|f| serde_json::to_string(f).unwrap_or_default());
 
     sqlx::query(
-        "INSERT INTO tasks (id, user_id, tab_url, prompt, page_html, action_recording, files_json, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))"
+        "INSERT INTO tasks (id, user_id, tab_url, prompt, page_html, action_recording, files_json, submission_token, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))"
     )
     .bind(&task_id)
     .bind(&user_id)
@@ -74,6 +76,7 @@ pub async fn create_task(
     .bind(&req.page_html)
     .bind(&req.action_recording)
     .bind(&files_json)
+    .bind(&submission_token)
     .execute(&state.pool)
     .await?;
 
@@ -82,6 +85,7 @@ pub async fn create_task(
         Json(CreateTaskResponse {
             id: task_id,
             status: "pending".to_string(),
+            submission_token,
         }),
     ))
 }
@@ -124,6 +128,56 @@ pub async fn get_task(
     )
     .bind(&task_id)
     .bind(&user_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    let script_code = if task.status == "done" {
+        task.script_code.as_ref().map(|code| {
+            with_userscript_header(
+                &task.script_name.clone().unwrap_or_default(),
+                &task.match_pattern.clone().unwrap_or_default(),
+                code,
+            )
+        })
+    } else {
+        None
+    };
+
+    Ok(Json(GetTaskResponse {
+        id: task.id,
+        tab_url: task.tab_url,
+        prompt: task.prompt,
+        status: task.status,
+        estimated_price_cents: task.estimated_price_cents,
+        price_rationale: task.price_rationale,
+        script_name: task.script_name,
+        script_code,
+        match_pattern: task.match_pattern,
+        error_message: task.error_message,
+        created_at: task.created_at,
+        updated_at: task.updated_at,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/tasks/status/{token}",
+    params(("token" = String, Path, description = "Submission token (read-only access)")),
+    responses(
+        (status = 200, description = "Task status", body = GetTaskResponse),
+        (status = 404, description = "Token not found", body = crate::error::ErrorResponse),
+    ),
+    tag = "tasks"
+)]
+pub async fn get_task_by_token(
+    State(state): State<Arc<AppState>>,
+    Path(token): Path<String>,
+) -> Result<Json<GetTaskResponse>, AppError> {
+    let task = sqlx::query_as::<_, Task>(
+        "SELECT * FROM tasks WHERE submission_token = ?",
+    )
+    .bind(&token)
     .fetch_optional(&state.pool)
     .await?
     .ok_or(AppError::NotFound)?;
