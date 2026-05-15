@@ -14,7 +14,7 @@ services:
       DATABASE_URL: sqlite:./data/egghead.db
       LISTEN_ADDR: 0.0.0.0:3000
       BASE_URL: https://userscripts.osmosis.page
-      OIDC_ISSUER_URL: https://auth.osmosis.page/application/o/egghead/
+      OIDC_ISSUER_URL: https://auth.osmosis.page/application/o/userscripts/
       KV_URL: https://kv.osmosis.page
       WORKER_POLL_INTERVAL_SECS: "5"
       MAX_HTML_BYTES: "150000"

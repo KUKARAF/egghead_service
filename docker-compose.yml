@@ -12,10 +12,10 @@ services:
       ENV: DEVELOPMENT
 
       # OIDC Configuration (auth.osmosis.page)
-      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-https://auth.osmosis.page/application/o/egghead/}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-https://auth.osmosis.page/application/o/userscripts/}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
-      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-https://egghead.osmosis.page/auth/callback}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:3000/auth/callback}
 
       # KV Store Configuration (secrets)
       KV_API_KEY: ${KV_API_KEY}
