@@ -19,5 +19,4 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/me/tasks/:id/reject", post(me::reject_task))
         .route("/me/token", get(me::get_api_token))
         .route("/me/token/regenerate", post(me::regenerate_api_token))
-        .route("/openapi.json", get(openapi::get_openapi_json))
 }
