@@ -1,5 +1,5 @@
 -- Submission tokens for read-only task access
-ALTER TABLE tasks ADD COLUMN submission_token TEXT UNIQUE;
+ALTER TABLE tasks ADD COLUMN submission_token TEXT;
 
 CREATE TABLE submission_tokens (
     token TEXT NOT NULL PRIMARY KEY,
@@ -8,3 +8,4 @@ CREATE TABLE submission_tokens (
 );
 
 CREATE INDEX idx_submission_tokens_task ON submission_tokens(task_id);
+CREATE UNIQUE INDEX idx_tasks_submission_token ON tasks(submission_token) WHERE submission_token IS NOT NULL;
