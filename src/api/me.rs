@@ -16,7 +16,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ApiTokenResponse {
     pub has_token: bool,
     pub label: Option<String>,
@@ -24,11 +24,21 @@ pub struct ApiTokenResponse {
     pub masked_token: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct GenerateTokenResponse {
     pub token: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/me/tasks",
+    responses(
+        (status = 200, description = "List of tasks", body = Vec<TaskView>),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+    ),
+    security(("SessionCookie" = [])),
+    tag = "me"
+)]
 pub async fn list_tasks(
     State(state): State<Arc<AppState>>,
     SessionAuth(claims): SessionAuth,
@@ -56,6 +66,18 @@ pub async fn list_tasks(
     Ok(Json(tasks.into_iter().map(TaskView::from).collect()))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/me/tasks/{id}",
+    params(("id" = String, Path, description = "Task UUID")),
+    responses(
+        (status = 200, description = "Task details", body = TaskView),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("SessionCookie" = [])),
+    tag = "me"
+)]
 pub async fn get_task_detail(
     State(state): State<Arc<AppState>>,
     SessionAuth(claims): SessionAuth,
@@ -86,6 +108,18 @@ pub async fn get_task_detail(
     Ok(Json(TaskView::from(task)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/me/tasks/{id}/approve",
+    params(("id" = String, Path, description = "Task UUID")),
+    responses(
+        (status = 204, description = "Task approved"),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("SessionCookie" = [])),
+    tag = "me"
+)]
 pub async fn approve_task(
     State(state): State<Arc<AppState>>,
     SessionAuth(claims): SessionAuth,
@@ -122,6 +156,18 @@ pub async fn approve_task(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/me/tasks/{id}/reject",
+    params(("id" = String, Path, description = "Task UUID")),
+    responses(
+        (status = 204, description = "Task rejected"),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("SessionCookie" = [])),
+    tag = "me"
+)]
 pub async fn reject_task(
     State(state): State<Arc<AppState>>,
     SessionAuth(claims): SessionAuth,
@@ -158,6 +204,16 @@ pub async fn reject_task(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/me/token",
+    responses(
+        (status = 200, description = "API token info", body = ApiTokenResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+    ),
+    security(("SessionCookie" = [])),
+    tag = "me"
+)]
 pub async fn get_api_token(
     State(state): State<Arc<AppState>>,
     SessionAuth(claims): SessionAuth,
@@ -207,6 +263,16 @@ pub async fn get_api_token(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/me/token/regenerate",
+    responses(
+        (status = 200, description = "New token generated", body = GenerateTokenResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+    ),
+    security(("SessionCookie" = [])),
+    tag = "me"
+)]
 pub async fn regenerate_api_token(
     State(state): State<Arc<AppState>>,
     SessionAuth(claims): SessionAuth,

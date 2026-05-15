@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct FileAttachment {
+    pub name: String,
+    pub content: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Task {
     pub id: String,
@@ -8,6 +14,7 @@ pub struct Task {
     pub prompt: String,
     pub page_html: String,
     pub action_recording: Option<String>,
+    pub files_json: Option<String>,
     pub status: String,
     pub estimated_price_cents: Option<i64>,
     pub price_rationale: Option<String>,
@@ -18,12 +25,13 @@ pub struct Task {
     pub match_pattern: Option<String>,
     pub error_message: Option<String>,
     pub worker_started_at: Option<String>,
+    pub git_sha: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
 
-/// Lightweight task view for API responses (omits large html/recording fields).
-#[derive(Debug, Serialize)]
+/// Lightweight task view for API responses (omits large html/recording/files fields).
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct TaskView {
     pub id: String,
     pub tab_url: String,
@@ -35,6 +43,7 @@ pub struct TaskView {
     pub script_code: Option<String>,
     pub match_pattern: Option<String>,
     pub error_message: Option<String>,
+    pub git_sha: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -52,6 +61,7 @@ impl From<Task> for TaskView {
             script_code: t.script_code,
             match_pattern: t.match_pattern,
             error_message: t.error_message,
+            git_sha: t.git_sha,
             created_at: t.created_at,
             updated_at: t.updated_at,
         }

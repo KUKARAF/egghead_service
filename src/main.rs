@@ -21,6 +21,8 @@ use axum::{
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -73,7 +75,11 @@ async fn main() -> Result<()> {
         .nest("/api", api::router())
         .nest("/", frontend::router())
         .layer(axum_middleware::from_fn(middleware::security_headers::layer))
-        .with_state(Arc::clone(&state));
+        .with_state(Arc::clone(&state))
+        .merge(
+            SwaggerUi::new("/api/docs")
+                .url("/api/openapi.json", api::openapi::ApiDoc::openapi())
+        );
 
     let listener = TcpListener::bind(&config.listen_addr).await?;
     tracing::info!("listening on {}", config.listen_addr);

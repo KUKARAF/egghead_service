@@ -66,10 +66,11 @@ async fn run_estimation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
         tab_url: String,
         prompt: String,
         page_html: String,
+        files_json: Option<String>,
     }
 
     let task = sqlx::query_as::<_, TaskData>(
-        "SELECT tab_url, prompt, page_html FROM tasks WHERE id = ?"
+        "SELECT tab_url, prompt, page_html, files_json FROM tasks WHERE id = ?"
     )
     .bind(task_id)
     .fetch_one(&state.pool)
@@ -84,7 +85,7 @@ async fn run_estimation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
 
     let client = crate::ai::client::OpenRouterClient::new(&state.http_client, &openrouter_key);
 
-    let resp = call_estimate(&client, &task.tab_url, &task.prompt, &task.page_html).await?;
+    let resp = call_estimate(&client, &task.tab_url, &task.prompt, &task.page_html, task.files_json.as_deref()).await?;
 
     sqlx::query(
         "UPDATE tasks

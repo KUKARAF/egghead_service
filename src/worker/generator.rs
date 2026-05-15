@@ -1,6 +1,7 @@
 use crate::{
     ai::generate::call_generate,
     state::AppState,
+    worker::git,
 };
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
@@ -68,14 +69,16 @@ async fn poll_approved(state: &Arc<AppState>) -> anyhow::Result<()> {
 async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<()> {
     #[derive(sqlx::FromRow)]
     struct TaskData {
+        user_id: String,
         tab_url: String,
         prompt: String,
         page_html: String,
         action_recording: Option<String>,
+        files_json: Option<String>,
     }
 
     let task = sqlx::query_as::<_, TaskData>(
-        "SELECT tab_url, prompt, page_html, action_recording FROM tasks WHERE id = ?"
+        "SELECT user_id, tab_url, prompt, page_html, action_recording, files_json FROM tasks WHERE id = ?"
     )
     .bind(task_id)
     .fetch_one(&state.pool)
@@ -96,8 +99,25 @@ async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
         &task.prompt,
         &task.page_html,
         task.action_recording.as_deref(),
+        task.files_json.as_deref(),
     )
     .await?;
+
+    let scripts_dir = "/app/scripts";
+    git::init_repo_if_needed(scripts_dir)?;
+
+    let user_scripts_dir = format!("{}/{}", scripts_dir, task.user_id);
+    std::fs::create_dir_all(&user_scripts_dir)?;
+
+    let file_path = format!("{}/{}.user.js", user_scripts_dir, resp.name.replace(" ", "_"));
+    let full_script = crate::ai::generate::with_userscript_header(&resp.name, &resp.match_pattern, &resp.script_code);
+
+    let git_sha = git::commit_script(
+        scripts_dir,
+        &file_path,
+        &full_script,
+        &format!("generate {} for task {}", resp.name, task_id),
+    )?;
 
     sqlx::query(
         "UPDATE tasks
@@ -105,16 +125,18 @@ async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
              script_name = ?,
              script_code = ?,
              match_pattern = ?,
+             git_sha = ?,
              updated_at = datetime('now')
          WHERE id = ?"
     )
     .bind(&resp.name)
     .bind(&resp.script_code)
     .bind(&resp.match_pattern)
+    .bind(&git_sha)
     .bind(task_id)
     .execute(&state.pool)
     .await?;
 
-    tracing::info!(task_id = %task_id, script_name = %resp.name, "generation complete");
+    tracing::info!(task_id = %task_id, script_name = %resp.name, git_sha = %git_sha, "generation complete");
     Ok(())
 }

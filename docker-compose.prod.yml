@@ -28,9 +28,10 @@ services:
     dns:
       - 192.168.1.66
 
-    # Persistent SQLite database
+    # Persistent SQLite database and generated scripts
     volumes:
       - egghead_data:/app/data
+      - ./scripts:/app/scripts
 
     # Health check for orchestration
     healthcheck:

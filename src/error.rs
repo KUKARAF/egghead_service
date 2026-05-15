@@ -6,6 +6,11 @@ use axum::{
 use serde_json::json;
 use thiserror::Error;
 
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct ErrorResponse {
+    pub error: String,
+}
+
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("unauthorized")]

@@ -40,3 +40,6 @@ Thumbs.db
 
 # Node/npm (for testing only)
 node_modules/
+
+# Generated scripts (git repo for user scripts)
+scripts/

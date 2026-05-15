@@ -2,6 +2,7 @@ pub mod cleanup;
 pub mod estimator;
 pub mod generator;
 pub mod oidc_retry;
+pub mod git;
 
 use crate::state::AppState;
 use std::sync::Arc;

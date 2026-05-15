@@ -27,10 +27,16 @@ pub async fn call_estimate(
     tab_url: &str,
     prompt: &str,
     page_html: &str,
+    files_json: Option<&str>,
 ) -> Result<EstimateResponse> {
-    let user_message = format!(
+    let mut user_message = format!(
         "Page URL: {tab_url}\nUser request: {prompt}\nPage HTML:\n---\n{page_html}\n---"
     );
+
+    if let Some(files) = files_json {
+        user_message.push_str("\n\nSource files:\n");
+        user_message.push_str(files);
+    }
 
     let text = client.complete(SYSTEM_PROMPT, &user_message, 256).await?;
 

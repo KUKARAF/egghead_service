@@ -2,7 +2,7 @@ use crate::{
     ai::generate::with_userscript_header,
     auth::extractors::ApiTokenAuth,
     error::AppError,
-    models::task::Task,
+    models::task::{Task, FileAttachment},
     state::AppState,
 };
 use axum::{
@@ -14,39 +14,58 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateTaskRequest {
     pub tab_url: String,
     pub prompt: String,
     pub page_html: String,
     pub action_recording: Option<String>,
+    pub files: Option<Vec<FileAttachment>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct CreateTaskResponse {
     pub id: String,
     pub status: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/tasks",
+    request_body = CreateTaskRequest,
+    responses(
+        (status = 201, description = "Task created", body = CreateTaskResponse),
+        (status = 400, description = "Bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+    ),
+    security(("ApiToken" = [])),
+    tag = "tasks"
+)]
 pub async fn create_task(
     State(state): State<Arc<AppState>>,
     ApiTokenAuth { user_id, .. }: ApiTokenAuth,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<(StatusCode, Json<CreateTaskResponse>), AppError> {
-    if req.page_html.len() > state.config.max_html_bytes {
+    let total_size = req.page_html.len()
+        + req.files.as_ref()
+            .map(|f| f.iter().map(|fa| fa.content.len()).sum::<usize>())
+            .unwrap_or(0);
+
+    if total_size > state.config.max_html_bytes {
         return Err(AppError::BadRequest(
             format!(
-                "page_html exceeds {} bytes",
+                "total content (html + files) exceeds {} bytes",
                 state.config.max_html_bytes
             )
         ));
     }
 
     let task_id = Uuid::new_v4().to_string();
+    let files_json = req.files.as_ref().map(|f| serde_json::to_string(f).unwrap_or_default());
 
     sqlx::query(
-        "INSERT INTO tasks (id, user_id, tab_url, prompt, page_html, action_recording, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))"
+        "INSERT INTO tasks (id, user_id, tab_url, prompt, page_html, action_recording, files_json, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))"
     )
     .bind(&task_id)
     .bind(&user_id)
@@ -54,6 +73,7 @@ pub async fn create_task(
     .bind(&req.prompt)
     .bind(&req.page_html)
     .bind(&req.action_recording)
+    .bind(&files_json)
     .execute(&state.pool)
     .await?;
 
@@ -66,7 +86,7 @@ pub async fn create_task(
     ))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct GetTaskResponse {
     pub id: String,
     pub tab_url: String,
@@ -82,6 +102,18 @@ pub struct GetTaskResponse {
     pub updated_at: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/tasks/{id}",
+    params(("id" = String, Path, description = "Task UUID")),
+    responses(
+        (status = 200, description = "Task details", body = GetTaskResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("ApiToken" = [])),
+    tag = "tasks"
+)]
 pub async fn get_task(
     State(state): State<Arc<AppState>>,
     ApiTokenAuth { user_id, .. }: ApiTokenAuth,

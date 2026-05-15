@@ -29,14 +29,20 @@ pub async fn call_generate(
     prompt: &str,
     page_html: &str,
     action_recording: Option<&str>,
+    files_json: Option<&str>,
 ) -> Result<GenerateResponse> {
     let recording_section = action_recording
         .map(|r| format!("Action recording:\n---\n{r}\n---"))
         .unwrap_or_else(|| "Action recording:\n---\nNone\n---".to_string());
 
-    let user_message = format!(
+    let mut user_message = format!(
         "Page URL: {tab_url}\nUser request: {prompt}\nPage HTML:\n---\n{page_html}\n---\n{recording_section}"
     );
+
+    if let Some(files) = files_json {
+        user_message.push_str("\n\nSource files:\n");
+        user_message.push_str(files);
+    }
 
     let text = client.complete(SYSTEM_PROMPT, &user_message, 4096).await?;
 
