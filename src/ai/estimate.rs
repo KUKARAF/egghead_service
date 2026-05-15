@@ -1,7 +1,6 @@
 use crate::ai::client::OpenRouterClient;
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
-use serde_json::json;
 
 const SYSTEM_PROMPT: &str = r#"You are a pricing assistant for userscript development. Estimate based on human developer hours at 200 PLN/hour.
 
@@ -36,24 +35,19 @@ pub async fn call_estimate(
         user_message.push_str(files);
     }
 
-    let schema = json!({
-        "type": "object",
-        "properties": {
-            "min_hours": {"type": "number", "description": "Minimum estimated hours"},
-            "max_hours": {"type": "number", "description": "Maximum estimated hours"},
-            "total_price_pln": {"type": "integer", "description": "Total price in Polish zloty"},
-            "rationale": {"type": "string", "description": "Brief explanation of the estimate"}
-        },
-        "required": ["min_hours", "max_hours", "total_price_pln", "rationale"],
-        "additionalProperties": false
-    });
-
-    let text = client.complete_with_schema(SYSTEM_PROMPT, &user_message, 256, schema, "EstimateResponse").await?;
+    let text = client.complete("google/gemma-4-31b-it", SYSTEM_PROMPT, &user_message, 256).await?;
 
     tracing::warn!("Estimate response from OpenRouter: {}", text);
 
+    let json_str = text
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+
     let resp: EstimateResponse =
-        serde_json::from_str(&text).context(format!("failed to parse estimate JSON from AI response: '{}'", text))?;
+        serde_json::from_str(json_str).context(format!("failed to parse estimate JSON from AI response: '{}'", json_str))?;
 
     if resp.total_price_pln < 0 || resp.total_price_pln > 10_000 {
         return Err(anyhow!(

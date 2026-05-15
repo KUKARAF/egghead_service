@@ -11,7 +11,6 @@ struct Message {
 struct RequestBody {
     model: String,
     max_tokens: u32,
-    system: String,
     messages: Vec<Message>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<ResponseFormat>,
@@ -56,29 +55,13 @@ impl<'a> OpenRouterClient<'a> {
         OpenRouterClient { http, api_key }
     }
 
-    pub async fn complete(
-        &self,
-        system: &str,
-        user_message: &str,
-        max_tokens: u32,
-    ) -> Result<String> {
-        let body = RequestBody {
-            model: "anthropic/claude-3.5-sonnet".to_string(),
-            max_tokens,
-            system: system.to_string(),
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: user_message.to_string(),
-            }],
-            response_format: None,
-        };
-
+    async fn send(&self, body: &RequestBody) -> Result<String> {
         let resp = self
             .http
             .post("https://openrouter.ai/api/v1/chat/completions")
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("content-type", "application/json")
-            .json(&body)
+            .json(body)
             .send()
             .await
             .context("OpenRouter API request failed")?;
@@ -107,8 +90,28 @@ impl<'a> OpenRouterClient<'a> {
             .ok_or_else(|| anyhow!("no choices in OpenRouter response"))
     }
 
+    pub async fn complete(
+        &self,
+        model: &str,
+        system: &str,
+        user_message: &str,
+        max_tokens: u32,
+    ) -> Result<String> {
+        let body = RequestBody {
+            model: model.to_string(),
+            max_tokens,
+            messages: vec![
+                Message { role: "system".to_string(), content: system.to_string() },
+                Message { role: "user".to_string(), content: user_message.to_string() },
+            ],
+            response_format: None,
+        };
+        self.send(&body).await
+    }
+
     pub async fn complete_with_schema(
         &self,
+        model: &str,
         system: &str,
         user_message: &str,
         max_tokens: u32,
@@ -116,13 +119,12 @@ impl<'a> OpenRouterClient<'a> {
         schema_name: &str,
     ) -> Result<String> {
         let body = RequestBody {
-            model: "anthropic/claude-3.5-sonnet".to_string(),
+            model: model.to_string(),
             max_tokens,
-            system: system.to_string(),
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: user_message.to_string(),
-            }],
+            messages: vec![
+                Message { role: "system".to_string(), content: system.to_string() },
+                Message { role: "user".to_string(), content: user_message.to_string() },
+            ],
             response_format: Some(ResponseFormat {
                 format_type: "json_schema".to_string(),
                 json_schema: JsonSchema {
@@ -132,38 +134,6 @@ impl<'a> OpenRouterClient<'a> {
                 },
             }),
         };
-
-        let resp = self
-            .http
-            .post("https://openrouter.ai/api/v1/chat/completions")
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .context("OpenRouter API request failed")?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(anyhow!("OpenRouter API error {status}: {text}"));
-        }
-
-        let text = resp
-            .text()
-            .await
-            .context("failed to read OpenRouter response")?;
-
-        tracing::debug!("OpenRouter structured response: {}", text);
-
-        let response: ResponseBody = serde_json::from_str(&text)
-            .context(format!("failed to parse OpenRouter response: {}", text))?;
-
-        response
-            .choices
-            .into_iter()
-            .next()
-            .map(|c| c.message.content)
-            .ok_or_else(|| anyhow!("no choices in OpenRouter response"))
+        self.send(&body).await
     }
 }

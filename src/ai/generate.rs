@@ -44,7 +44,7 @@ pub async fn call_generate(
         user_message.push_str(files);
     }
 
-    let text = client.complete(SYSTEM_PROMPT, &user_message, 4096).await?;
+    let text = client.complete("google/gemma-4-31b-it", SYSTEM_PROMPT, &user_message, 4096).await?;
 
     let json_str = text
         .trim()
