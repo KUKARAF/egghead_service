@@ -28,9 +28,9 @@ services:
     dns:
       - 192.168.1.66
 
-    # Persistent SQLite database and generated scripts
+    # Persistent SQLite database and generated scripts (local bind mounts)
     volumes:
-      - egghead_data:/app/data
+      - ./data:/app/data
       - ./scripts:/app/scripts
 
     # Health check for orchestration
@@ -47,7 +47,3 @@ services:
       options:
         max-size: "100m"
         max-file: "10"
-
-volumes:
-  egghead_data:
-    driver: local
