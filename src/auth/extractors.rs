@@ -15,7 +15,6 @@ pub struct SessionAuth(pub SessionClaims);
 /// Auth via `Authorization: Bearer egghead_<token>` for the Chrome extension.
 pub struct ApiTokenAuth {
     pub user_id: String,
-    pub email: String,
 }
 
 fn extract_bearer(parts: &Parts) -> Option<String> {
@@ -72,7 +71,6 @@ impl FromRequestParts<Arc<AppState>> for ApiTokenAuth {
         if state.config.dev_mode {
             return Ok(ApiTokenAuth {
                 user_id: "dev-user-id".to_string(),
-                email: "dev@localhost".to_string(),
             });
         }
 
@@ -87,14 +85,12 @@ impl FromRequestParts<Arc<AppState>> for ApiTokenAuth {
         #[derive(sqlx::FromRow)]
         struct ApiTokenRow {
             user_id: String,
-            email: String,
             token_id: String,
         }
 
         let row = sqlx::query_as::<_, ApiTokenRow>(
-            "SELECT at.user_id, u.email, at.id as token_id
+            "SELECT at.user_id, at.id as token_id
              FROM api_tokens at
-             JOIN users u ON u.id = at.user_id
              WHERE at.token_hash = ? AND at.revoked_at IS NULL"
         )
         .bind(&token_hash)
@@ -116,7 +112,6 @@ impl FromRequestParts<Arc<AppState>> for ApiTokenAuth {
 
         Ok(ApiTokenAuth {
             user_id: row.user_id,
-            email: row.email,
         })
     }
 }

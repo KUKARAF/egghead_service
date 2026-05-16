@@ -1,45 +1,60 @@
 use anyhow::{anyhow, Context, Result};
 
-/// Fetches the OpenRouter API key from kv.osmosis.page using a KV API key.
-pub async fn fetch_openrouter_key(
+async fn fetch_kv_secret(
     http: &reqwest::Client,
     kv_url: &str,
     kv_api_key: &str,
+    key_name: &str,
 ) -> Result<String> {
-    let url = format!("{kv_url}/kv/EXTENSION_OPENROUTER_API");
-
-    tracing::info!("Fetching OpenRouter key from: {}", url);
+    let url = format!("{kv_url}/kv/{key_name}");
 
     let resp = http
         .get(&url)
         .header("X-Api-Key", kv_api_key)
         .send()
         .await
-        .context("failed to fetch OpenRouter key from KV")?;
+        .context(format!("failed to fetch {key_name} from KV"))?;
 
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        tracing::error!("KV fetch failed: {} {}", status, text);
-        return Err(anyhow!(
-            "KV fetch failed: {} {}",
-            status,
-            text
-        ));
+        return Err(anyhow!("KV fetch failed for {key_name}: {status} {text}"));
     }
 
-    let key = resp
+    let value = resp
         .text()
         .await
-        .context("failed to read KV response body")?
+        .context(format!("failed to read KV response for {key_name}"))?
         .trim()
         .to_string();
 
-    if key.is_empty() {
-        tracing::error!("EXTENSION_OPENROUTER_API key is empty in KV");
-        return Err(anyhow!("EXTENSION_OPENROUTER_API key is empty in KV"));
+    if value.is_empty() {
+        return Err(anyhow!("{key_name} is empty in KV"));
     }
 
-    tracing::info!("Successfully fetched OpenRouter key (length: {})", key.len());
-    Ok(key)
+    Ok(value)
+}
+
+pub async fn fetch_openrouter_key(
+    http: &reqwest::Client,
+    kv_url: &str,
+    kv_api_key: &str,
+) -> Result<String> {
+    fetch_kv_secret(http, kv_url, kv_api_key, "EXTENSION_OPENROUTER_API").await
+}
+
+pub async fn fetch_github_token(
+    http: &reqwest::Client,
+    kv_url: &str,
+    kv_api_key: &str,
+) -> Result<String> {
+    fetch_kv_secret(http, kv_url, kv_api_key, "GITHUB_TOKEN").await
+}
+
+pub async fn fetch_github_repo(
+    http: &reqwest::Client,
+    kv_url: &str,
+    kv_api_key: &str,
+) -> Result<String> {
+    fetch_kv_secret(http, kv_url, kv_api_key, "GITHUB_REPO").await
 }

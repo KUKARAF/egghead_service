@@ -13,8 +13,6 @@ pub struct Config {
     pub oidc_redirect_uri: String,
     pub session_signing_key: String,
 
-    pub base_url: String,
-
     pub kv_api_key: String,
     pub kv_url: String,
 
@@ -48,9 +46,6 @@ impl Config {
                 );
                 key
             }),
-
-            base_url: env::var("BASE_URL")
-                .unwrap_or_else(|_| "http://localhost:3000".to_string()),
 
             kv_api_key: env::var("KV_API_KEY")
                 .context("KV_API_KEY is required to fetch OpenRouter API key from kv.osmosis.page")?,

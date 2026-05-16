@@ -6,5 +6,4 @@ pub struct User {
     pub oidc_subject: String,
     pub email: String,
     pub created_at: String,
-    pub balance_cents: i64,
 }

@@ -1,56 +1,55 @@
-use anyhow::Result;
-use std::fs;
-use std::path::Path;
-use std::process::Command;
+use anyhow::{anyhow, Context, Result};
+use base64::{engine::general_purpose::STANDARD, Engine};
+use serde::Deserialize;
 
-pub fn init_repo_if_needed(repo_path: &str) -> Result<()> {
-    if !Path::new(repo_path).exists() {
-        fs::create_dir_all(repo_path)?;
-        Command::new("git")
-            .arg("init")
-            .current_dir(repo_path)
-            .output()?;
-
-        Command::new("git")
-            .args(&["config", "user.name", "egghead-service"])
-            .current_dir(repo_path)
-            .output()?;
-
-        Command::new("git")
-            .args(&["config", "user.email", "service@egghead.local"])
-            .current_dir(repo_path)
-            .output()?;
-    }
-    Ok(())
+#[derive(Deserialize)]
+struct GithubCommit {
+    sha: String,
 }
 
-pub fn commit_script(
-    repo_path: &str,
-    file_path: &str,
+#[derive(Deserialize)]
+struct GithubPushResponse {
+    commit: GithubCommit,
+}
+
+pub async fn push_to_github(
+    http: &reqwest::Client,
+    token: &str,
+    repo: &str,
+    task_id: &str,
+    script_name: &str,
     content: &str,
-    message: &str,
 ) -> Result<String> {
-    fs::write(file_path, content)?;
+    let path = format!("scripts/{task_id}.user.js");
+    let url = format!("https://api.github.com/repos/{repo}/contents/{path}");
+    let encoded = STANDARD.encode(content.as_bytes());
 
-    Command::new("git")
-        .arg("add")
-        .arg(Path::new(file_path).file_name().unwrap())
-        .current_dir(repo_path)
-        .output()?;
+    let body = serde_json::json!({
+        "message": format!("add: {script_name}"),
+        "content": encoded,
+    });
 
-    Command::new("git")
-        .args(&["commit", "-m", message])
-        .current_dir(repo_path)
-        .output()?;
+    let resp = http
+        .put(&url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "egghead-service")
+        .json(&body)
+        .send()
+        .await
+        .context("GitHub API request failed")?;
 
-    let output = Command::new("git")
-        .args(&["rev-parse", "HEAD"])
-        .current_dir(repo_path)
-        .output()?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(anyhow!("GitHub API error {status}: {text}"));
+    }
 
-    let sha = String::from_utf8(output.stdout)?
-        .trim()
-        .to_string();
+    let push_resp: GithubPushResponse = resp
+        .json()
+        .await
+        .context("failed to parse GitHub API response")?;
 
-    Ok(sha)
+    Ok(push_resp.commit.sha)
 }

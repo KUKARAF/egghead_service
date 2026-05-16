@@ -1,7 +1,3 @@
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-};
 use utoipa::{
     openapi::security::{ApiKey, ApiKeyValue, Http, HttpAuthScheme, SecurityScheme},
     Modify, OpenApi,
@@ -23,6 +19,7 @@ use crate::models::task::TaskView;
         crate::api::me::get_task_detail,
         crate::api::me::approve_task,
         crate::api::me::reject_task,
+        crate::api::me::delete_task,
         crate::api::me::get_api_token,
         crate::api::me::regenerate_api_token,
     ),
@@ -60,14 +57,3 @@ impl Modify for SecurityAddon {
     }
 }
 
-pub async fn get_openapi_json() -> Response {
-    match ApiDoc::openapi().to_json() {
-        Ok(json) => (
-            StatusCode::OK,
-            [("content-type", "application/json")],
-            json,
-        )
-            .into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}

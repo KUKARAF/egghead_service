@@ -1,6 +1,10 @@
 use crate::{
-    ai::generate::{call_generate, with_userscript_header},
+    ai::{
+        generate::{call_generate, with_userscript_header},
+        secrets::{fetch_github_repo, fetch_github_token},
+    },
     state::AppState,
+    worker::git::push_to_github,
 };
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
@@ -120,5 +124,44 @@ async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
     .await?;
 
     tracing::info!(task_id = %task_id, script_name = %resp.name, "generation complete");
+
+    if let Err(e) = push_script_to_github(state, task_id, &resp.name, &full_script).await {
+        tracing::warn!(task_id = %task_id, "GitHub push skipped: {e:#}");
+    }
+
+    Ok(())
+}
+
+async fn push_script_to_github(
+    state: &Arc<AppState>,
+    task_id: &str,
+    script_name: &str,
+    content: &str,
+) -> anyhow::Result<()> {
+    let token = fetch_github_token(
+        &state.http_client,
+        &state.config.kv_url,
+        &state.config.kv_api_key,
+    )
+    .await?;
+
+    let repo = fetch_github_repo(
+        &state.http_client,
+        &state.config.kv_url,
+        &state.config.kv_api_key,
+    )
+    .await?;
+
+    let sha = push_to_github(&state.http_client, &token, &repo, task_id, script_name, content).await?;
+
+    sqlx::query(
+        "UPDATE tasks SET git_sha = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(&sha)
+    .bind(task_id)
+    .execute(&state.pool)
+    .await?;
+
+    tracing::info!(task_id = %task_id, git_sha = %sha, "pushed to GitHub");
     Ok(())
 }
