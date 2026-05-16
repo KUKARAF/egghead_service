@@ -87,7 +87,19 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                     const date = new Date(task.created_at).toLocaleDateString();
                     const url = new URL(task.tab_url).hostname;
                     const status = `<span class="status ${task.status}">${task.status}</span>`;
-                    const price = task.estimated_price_cents ? `$${(task.estimated_price_cents / 100).toFixed(2)}` : '—';
+                    let price = '—';
+                    if (task.estimated_token_cost_eur != null || task.estimated_human_hours != null) {
+                        const parts = [];
+                        if (task.estimated_token_cost_eur != null) {
+                            parts.push(`€${task.estimated_token_cost_eur.toFixed(2)} tokens`);
+                        }
+                        if (task.estimated_human_hours === 0) {
+                            parts.push('(AI will handle)');
+                        } else if (task.estimated_human_hours != null) {
+                            parts.push(`€${(task.estimated_human_hours * 20).toFixed(0)} labor (${task.estimated_human_hours}h)`);
+                        }
+                        price = parts.join('<br>');
+                    }
 
                     const deleteBtn = `<button class="btn-delete" onclick="deleteTask('${task.id}')" title="Delete">🗑</button>`;
                     let actions = deleteBtn;

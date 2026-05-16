@@ -77,10 +77,14 @@ async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
         page_html: String,
         action_recording: Option<String>,
         files_json: Option<String>,
+        user_email: String,
     }
 
     let task = sqlx::query_as::<_, TaskData>(
-        "SELECT tab_url, prompt, page_html, action_recording, files_json FROM tasks WHERE id = ?",
+        "SELECT t.tab_url, t.prompt, t.page_html, t.action_recording, t.files_json, u.email as user_email
+         FROM tasks t
+         JOIN users u ON u.id = t.user_id
+         WHERE t.id = ?",
     )
     .bind(task_id)
     .fetch_one(&state.pool)
@@ -125,16 +129,44 @@ async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
 
     tracing::info!(task_id = %task_id, script_name = %resp.name, "generation complete");
 
-    if let Err(e) = push_script_to_github(state, task_id, &resp.name, &full_script).await {
+    let user_slug = task.user_email
+        .split('@')
+        .next()
+        .map(|s| slugify(s))
+        .unwrap_or_else(|| "user".to_string());
+
+    if let Err(e) = push_script_to_github(
+        state,
+        task_id,
+        &user_slug,
+        &task.tab_url,
+        &task.prompt,
+        &resp.name,
+        &full_script,
+    ).await {
         tracing::warn!(task_id = %task_id, "GitHub push skipped: {e:#}");
     }
 
     Ok(())
 }
 
+fn slugify(s: &str) -> String {
+    let raw: String = s
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .collect();
+    raw.split('-')
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
 async fn push_script_to_github(
     state: &Arc<AppState>,
     task_id: &str,
+    user_slug: &str,
+    tab_url: &str,
+    prompt: &str,
     script_name: &str,
     content: &str,
 ) -> anyhow::Result<()> {
@@ -152,7 +184,17 @@ async fn push_script_to_github(
     )
     .await?;
 
-    let sha = push_to_github(&state.http_client, &token, &repo, task_id, script_name, content).await?;
+    let sha = push_to_github(
+        &state.http_client,
+        &token,
+        &repo,
+        task_id,
+        user_slug,
+        tab_url,
+        script_name,
+        prompt,
+        content,
+    ).await?;
 
     sqlx::query(
         "UPDATE tasks SET git_sha = ?, updated_at = datetime('now') WHERE id = ?",

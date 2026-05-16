@@ -12,20 +12,44 @@ struct GithubPushResponse {
     commit: GithubCommit,
 }
 
-pub async fn push_to_github(
+fn slugify(s: &str) -> String {
+    let raw: String = s
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .collect();
+    raw.split('-')
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+fn extract_site(url: &str) -> String {
+    ::url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(|h| h.to_string()))
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn build_toml(task_id: &str, tab_url: &str, prompt: &str, status: &str) -> String {
+    let escaped_prompt = prompt.replace('\\', "\\\\").replace('"', "\\\"");
+    format!(
+        "[task]\nid = \"{task_id}\"\nstatus = \"{status}\"\ntab_url = \"{tab_url}\"\nprompt = \"\"\"\n{escaped_prompt}\n\"\"\"\n"
+    )
+}
+
+async fn put_file(
     http: &reqwest::Client,
     token: &str,
     repo: &str,
-    task_id: &str,
-    script_name: &str,
+    path: &str,
+    message: &str,
     content: &str,
 ) -> Result<String> {
-    let path = format!("scripts/{task_id}.user.js");
     let url = format!("https://api.github.com/repos/{repo}/contents/{path}");
     let encoded = STANDARD.encode(content.as_bytes());
 
     let body = serde_json::json!({
-        "message": format!("add: {script_name}"),
+        "message": message,
         "content": encoded,
     });
 
@@ -52,4 +76,32 @@ pub async fn push_to_github(
         .context("failed to parse GitHub API response")?;
 
     Ok(push_resp.commit.sha)
+}
+
+pub async fn push_to_github(
+    http: &reqwest::Client,
+    token: &str,
+    repo: &str,
+    task_id: &str,
+    user_slug: &str,
+    tab_url: &str,
+    script_name: &str,
+    prompt: &str,
+    js_content: &str,
+) -> Result<String> {
+    let site = slugify(&extract_site(tab_url));
+    let script_slug = slugify(script_name);
+    let base = format!("{user_slug}/{site}/{script_slug}");
+
+    let js_path = format!("{base}.user.js");
+    let toml_path = format!("{base}.toml");
+
+    let sha = put_file(http, token, repo, &js_path, &format!("add: {script_name}"), js_content).await?;
+
+    let toml = build_toml(task_id, tab_url, prompt, "done");
+    if let Err(e) = put_file(http, token, repo, &toml_path, &format!("meta: {script_name}"), &toml).await {
+        tracing::warn!(task_id = %task_id, "TOML push failed (non-fatal): {e:#}");
+    }
+
+    Ok(sha)
 }

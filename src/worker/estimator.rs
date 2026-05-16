@@ -90,17 +90,24 @@ async fn run_estimation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
     sqlx::query(
         "UPDATE tasks
          SET status = 'awaiting_approval',
-             estimated_price_pln = ?,
+             estimated_human_hours = ?,
+             estimated_token_cost_eur = ?,
              price_rationale = ?,
              updated_at = datetime('now')
          WHERE id = ?"
     )
-    .bind(resp.total_price_pln)
+    .bind(resp.human_hours)
+    .bind(resp.token_cost_eur)
     .bind(&resp.rationale)
     .bind(task_id)
     .execute(&state.pool)
     .await?;
 
-    tracing::info!(task_id = %task_id, min_hours = resp.min_hours, max_hours = resp.max_hours, price_pln = resp.total_price_pln, "estimation complete");
+    tracing::info!(
+        task_id = %task_id,
+        human_hours = resp.human_hours,
+        token_cost_eur = resp.token_cost_eur,
+        "estimation complete"
+    );
     Ok(())
 }

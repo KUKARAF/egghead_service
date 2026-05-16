@@ -2,20 +2,27 @@ use crate::ai::client::OpenRouterClient;
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 
-const SYSTEM_PROMPT: &str = r#"You are a pricing assistant for userscript development. Estimate based on human developer hours at 200 PLN/hour.
+const SYSTEM_PROMPT: &str = r#"You are a pricing assistant for userscript automation.
 
-Complexity levels:
-- Simple (hide/show, CSS tweaks): 0.5-1 hour = 100-200 PLN
-- Moderate (form fill, clicks, observer): 1-3 hours = 200-600 PLN
-- Complex (API calls, state, WebSocket): 3-8 hours = 600-1600 PLN
+Return a JSON object with exactly these keys:
+- human_hours (number >= 0): developer hours to implement this manually.
+  Set to 0 if the task is simple enough for an AI agent to handle autonomously without human review.
+- token_cost_eur (number > 0): estimated cost in EUR for the AI generation call.
+  Assume ~4000 output tokens at €0.00005/token, then multiply by 2 for markup.
+  Typical values: simple 0.02, moderate 0.05, complex 0.15.
+- rationale (string): one or two sentences explaining your estimates.
 
-Return JSON with min_hours, max_hours, total_price_pln (whole number), and rationale."#;
+Complexity guide for human_hours:
+- Simple (CSS, hide/show, read-only DOM): 0.5–1 h
+- Moderate (form fill, clicks, MutationObserver): 1–3 h
+- Complex (API calls, state machines, WebSocket): 3–8 h
+
+Set human_hours to 0 only for truly trivial tasks where AI generation is fully reliable."#;
 
 #[derive(Debug, Deserialize)]
 pub struct EstimateResponse {
-    pub min_hours: f64,
-    pub max_hours: f64,
-    pub total_price_pln: i64,
+    pub human_hours: f64,
+    pub token_cost_eur: f64,
     pub rationale: String,
 }
 
@@ -46,21 +53,17 @@ pub async fn call_estimate(
         .trim_end_matches("```")
         .trim();
 
-    let resp: EstimateResponse =
-        serde_json::from_str(json_str).context(format!("failed to parse estimate JSON from AI response: '{}'", json_str))?;
+    let resp: EstimateResponse = serde_json::from_str(json_str)
+        .context(format!("failed to parse estimate JSON from AI response: '{}'", json_str))?;
 
-    if resp.total_price_pln < 0 || resp.total_price_pln > 10_000 {
-        return Err(anyhow!(
-            "total_price_pln out of acceptable range: {}",
-            resp.total_price_pln
-        ));
+    if resp.human_hours < 0.0 {
+        return Err(anyhow!("human_hours must be >= 0, got {}", resp.human_hours));
     }
 
-    if resp.min_hours <= 0.0 || resp.max_hours <= 0.0 || resp.min_hours > resp.max_hours {
+    if resp.token_cost_eur <= 0.0 || resp.token_cost_eur >= 100.0 {
         return Err(anyhow!(
-            "invalid hours: min={}, max={}",
-            resp.min_hours,
-            resp.max_hours
+            "token_cost_eur out of acceptable range (0, 100): {}",
+            resp.token_cost_eur
         ));
     }
 
