@@ -17,7 +17,7 @@ services:
       OIDC_ISSUER_URL: https://auth.osmosis.page/application/o/userscripts/
       KV_URL: https://kv.osmosis.page
       WORKER_POLL_INTERVAL_SECS: "5"
-      MAX_HTML_BYTES: "150000"
+      MAX_HTML_BYTES: "2000000"
       LOG_FORMAT: "json"
 
     # Port exposed to network (192.168.1.66:3088)
