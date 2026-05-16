@@ -5,11 +5,12 @@ AI-powered userscript generation backend service. Pairs with the **malpa** Chrom
 ## Features
 
 ✅ OIDC authentication (auth.osmosis.page)  
-✅ OpenRouter Claude API integration (secrets from kv.osmosis.page)  
+✅ OpenRouter Gemma AI integration (secrets from kv.osmosis.page)  
 ✅ Userscript generation task pipeline  
 ✅ Background worker system (estimation → approval → generation)  
-✅ Web dashboard for price approval  
+✅ Web dashboard for price approval / reject / delete  
 ✅ API token management  
+✅ GitHub script storage (generated scripts pushed to a GitHub repo)  
 ✅ Docker + Docker Compose ready  
 ✅ GitHub Actions CI/CD (auto-build & push to GHCR)  
 
@@ -71,8 +72,9 @@ kv.osmosis.page (fetches API key)
 user approves on web dashboard
     ↓
 worker::generator (polls for approved)
-    ↓ calls OpenRouter Claude again
+    ↓ calls OpenRouter Gemma
     ↓ generates full userscript
+    ↓ pushes script to GitHub repo (tasks.git_sha stored)
 malpa (polls GET /api/tasks/:id)
     ↓ receives script with ViolentMonkey header
     ↓ saves locally + registers in browser
@@ -103,7 +105,6 @@ KV_API_KEY                  # API key for kv.osmosis.page
 ```bash
 OIDC_ISSUER_URL             # default: https://auth.osmosis.page/application/o/egghead/
 KV_URL                      # default: https://kv.osmosis.page
-BASE_URL                    # default: http://localhost:3000
 SESSION_SIGNING_KEY         # auto-generated if empty
 WORKER_POLL_INTERVAL_SECS   # default: 5
 MAX_HTML_BYTES              # default: 150000
@@ -128,6 +129,7 @@ See `.env.example` and `.env.docker` for full examples.
 - `GET /api/me/tasks/:id` — Task detail
 - `POST /api/me/tasks/:id/approve` — Approve price estimate
 - `POST /api/me/tasks/:id/reject` — Reject price
+- `DELETE /api/me/tasks/:id` — Delete task
 - `GET /api/me/token` — Show API token (masked)
 - `POST /api/me/token/regenerate` — Get new token
 
@@ -275,10 +277,13 @@ cargo sqlx migrate add -r migration_name
 - **Backend:** Rust + Axum 0.7
 - **Database:** SQLite with sqlx
 - **Auth:** OIDC (auth.osmosis.page) + sessions
-- **AI:** OpenRouter (Claude 3.5 Haiku) — API key fetched from kv.osmosis.page
+- **AI:** OpenRouter (google/gemma-4-31b-it) — key fetched from kv.osmosis.page at runtime
   - KV Key: `EXTENSION_OPENROUTER_API`
-  - Fetched on each task (allows key rotation without redeployment)
-- **Secrets:** kv.osmosis.page (runtime secret fetching)
+- **Script storage:** GitHub Contents API — generated scripts pushed to a GitHub repo
+  - KV Key: `GITHUB_TOKEN` (PAT with `repo` write scope)
+  - KV Key: `GITHUB_REPO` (e.g. `kukaraf/userscripts`)
+  - Commit SHA stored in `tasks.git_sha`; push is non-fatal
+- **Secrets:** kv.osmosis.page (runtime secret fetching, no restart required on key rotation)
 - **Container:** Docker + Docker Compose
 - **CI/CD:** GitHub Actions → ghcr.io
 
