@@ -1,3 +1,4 @@
+pub mod html_chunks;
 pub mod me;
 pub mod tasks;
 pub mod openapi;
@@ -11,6 +12,7 @@ use std::sync::Arc;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/html-chunks", post(html_chunks::upload_chunk))
         .route("/tasks", post(tasks::create_task))
         .route("/tasks/:id", get(tasks::get_task))
         .route("/tasks/status/:token", get(tasks::get_task_by_token))

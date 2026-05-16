@@ -18,9 +18,19 @@ use uuid::Uuid;
 pub struct CreateTaskRequest {
     pub tab_url: String,
     pub prompt: String,
-    pub page_html: String,
+    /// Inline HTML for small pages (< ~100 KB)
+    pub page_html: Option<String>,
+    /// Reference to a pre-uploaded chunked HTML (large pages)
+    pub html_id: Option<String>,
     pub action_recording: Option<String>,
     pub files: Option<Vec<FileAttachment>>,
+}
+
+#[derive(sqlx::FromRow)]
+struct HtmlChunkRow {
+    chunk_index: i64,
+    total_chunks: i64,
+    content: String,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -47,18 +57,58 @@ pub async fn create_task(
     ApiTokenAuth { user_id, .. }: ApiTokenAuth,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<(StatusCode, Json<CreateTaskResponse>), AppError> {
-    let total_size = req.page_html.len()
+    // Resolve HTML: either inline or assembled from pre-uploaded chunks
+    let page_html = if let Some(html_id) = &req.html_id {
+        let chunks: Vec<HtmlChunkRow> = sqlx::query_as(
+            "SELECT chunk_index, total_chunks, content FROM html_uploads
+             WHERE html_id = ? ORDER BY chunk_index",
+        )
+        .bind(html_id)
+        .fetch_all(&state.pool)
+        .await?;
+
+        if chunks.is_empty() {
+            return Err(AppError::BadRequest(
+                format!("html_id '{}' not found or no chunks uploaded", html_id),
+            ));
+        }
+
+        let total = chunks[0].total_chunks;
+        if chunks.len() as i64 != total {
+            return Err(AppError::BadRequest(format!(
+                "incomplete upload: got {} of {} chunks",
+                chunks.len(),
+                total
+            )));
+        }
+
+        let html = chunks.into_iter().map(|c| c.content).collect::<String>();
+
+        // Clean up chunks now that they're assembled
+        sqlx::query("DELETE FROM html_uploads WHERE html_id = ?")
+            .bind(html_id)
+            .execute(&state.pool)
+            .await?;
+
+        html
+    } else if let Some(html) = req.page_html {
+        html
+    } else {
+        return Err(AppError::BadRequest(
+            "either page_html or html_id is required".into(),
+        ));
+    };
+
+    let total_size = page_html.len()
         + req.files.as_ref()
             .map(|f| f.iter().map(|fa| fa.content.len()).sum::<usize>())
             .unwrap_or(0);
 
     if total_size > state.config.max_html_bytes {
-        return Err(AppError::BadRequest(
-            format!(
-                "total content (html + files) exceeds {} bytes",
-                state.config.max_html_bytes
-            )
-        ));
+        return Err(AppError::BadRequest(format!(
+            "total content (html + files) exceeds {} bytes",
+            state.config.max_html_bytes
+        )));
     }
 
     let task_id = Uuid::new_v4().to_string();
@@ -73,7 +123,7 @@ pub async fn create_task(
     .bind(&user_id)
     .bind(&req.tab_url)
     .bind(&req.prompt)
-    .bind(&req.page_html)
+    .bind(&page_html)
     .bind(&req.action_recording)
     .bind(&files_json)
     .bind(&submission_token)
