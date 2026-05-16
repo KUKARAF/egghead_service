@@ -1,4 +1,7 @@
-use crate::state::AppState;
+use crate::{
+    ai::generate::{call_generate, with_userscript_header},
+    state::AppState,
+};
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
 
@@ -22,23 +25,100 @@ async fn poll_approved(state: &Arc<AppState>) -> anyhow::Result<()> {
     let rows = sqlx::query_as::<_, TaskRow>(
         "SELECT id FROM tasks
          WHERE status = 'awaiting_approval' AND approved_at IS NOT NULL
-         LIMIT 5"
+         LIMIT 5",
     )
     .fetch_all(&state.pool)
     .await?;
 
     for row in rows {
-        sqlx::query(
+        let claimed = sqlx::query(
             "UPDATE tasks
-             SET status = 'ready_for_implementation', updated_at = datetime('now')
-             WHERE id = ? AND status = 'awaiting_approval' AND approved_at IS NOT NULL"
+             SET status = 'processing', worker_started_at = datetime('now'), updated_at = datetime('now')
+             WHERE id = ? AND status = 'awaiting_approval' AND approved_at IS NOT NULL",
         )
         .bind(&row.id)
         .execute(&state.pool)
-        .await?;
+        .await?
+        .rows_affected();
 
-        tracing::info!(task_id = %row.id, "task ready for human implementation");
+        if claimed == 0 {
+            continue;
+        }
+
+        let state = Arc::clone(state);
+        let task_id = row.id.clone();
+        tokio::spawn(async move {
+            if let Err(e) = run_generation(&state, &task_id).await {
+                tracing::error!(task_id = %task_id, "generation failed: {e:#}");
+                let msg = format!("{e:#}");
+                let _ = sqlx::query(
+                    "UPDATE tasks SET status = 'failed', error_message = ?, updated_at = datetime('now') WHERE id = ?",
+                )
+                .bind(&msg)
+                .bind(&task_id)
+                .execute(&state.pool)
+                .await;
+            }
+        });
     }
 
+    Ok(())
+}
+
+async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<()> {
+    #[derive(sqlx::FromRow)]
+    struct TaskData {
+        tab_url: String,
+        prompt: String,
+        page_html: String,
+        action_recording: Option<String>,
+        files_json: Option<String>,
+    }
+
+    let task = sqlx::query_as::<_, TaskData>(
+        "SELECT tab_url, prompt, page_html, action_recording, files_json FROM tasks WHERE id = ?",
+    )
+    .bind(task_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let openrouter_key = crate::ai::secrets::fetch_openrouter_key(
+        &state.http_client,
+        &state.config.kv_url,
+        &state.config.kv_api_key,
+    )
+    .await?;
+
+    let client = crate::ai::client::OpenRouterClient::new(&state.http_client, &openrouter_key);
+
+    let resp = call_generate(
+        &client,
+        &task.tab_url,
+        &task.prompt,
+        &task.page_html,
+        task.action_recording.as_deref(),
+        task.files_json.as_deref(),
+    )
+    .await?;
+
+    let full_script = with_userscript_header(&resp.name, &resp.match_pattern, &resp.script_code);
+
+    sqlx::query(
+        "UPDATE tasks
+         SET status = 'done',
+             script_name = ?,
+             script_code = ?,
+             match_pattern = ?,
+             updated_at = datetime('now')
+         WHERE id = ?",
+    )
+    .bind(&resp.name)
+    .bind(&full_script)
+    .bind(&resp.match_pattern)
+    .bind(task_id)
+    .execute(&state.pool)
+    .await?;
+
+    tracing::info!(task_id = %task_id, script_name = %resp.name, "generation complete");
     Ok(())
 }

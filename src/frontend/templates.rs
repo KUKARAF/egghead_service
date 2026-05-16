@@ -89,11 +89,12 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                     const status = `<span class="status ${task.status}">${task.status}</span>`;
                     const price = task.estimated_price_cents ? `$${(task.estimated_price_cents / 100).toFixed(2)}` : '—';
 
-                    let actions = '';
+                    const deleteBtn = `<button class="btn-delete" onclick="deleteTask('${task.id}')" title="Delete">🗑</button>`;
+                    let actions = deleteBtn;
                     if (task.status === 'awaiting_approval') {
-                        actions = `<button onclick="approveTask('${task.id}')">Approve</button> <button onclick="rejectTask('${task.id}')">Reject</button>`;
+                        actions = `<button onclick="approveTask('${task.id}')">Approve</button> <button onclick="rejectTask('${task.id}')">Reject</button> ${deleteBtn}`;
                     } else if (task.status === 'done') {
-                        actions = `<button onclick="copyScript('${task.id}')">Copy Script</button>`;
+                        actions = `<button onclick="copyScript('${task.id}')">Copy Script</button> ${deleteBtn}`;
                     }
 
                     html += `<tr><td>${date}</td><td>${url}</td><td>${task.prompt.slice(0, 30)}...</td><td>${status}</td><td class="price">${price}</td><td class="actions">${actions}</td></tr>`;
@@ -112,6 +113,12 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
 
         async function rejectTask(id) {
             await fetch(`/api/me/tasks/${id}/reject`, { method: 'POST' });
+            loadTasks();
+        }
+
+        async function deleteTask(id) {
+            if (!confirm('Delete this task?')) return;
+            await fetch(`/api/me/tasks/${id}`, { method: 'DELETE' });
             loadTasks();
         }
 

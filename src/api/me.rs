@@ -205,6 +205,52 @@ pub async fn reject_task(
 }
 
 #[utoipa::path(
+    delete,
+    path = "/api/me/tasks/{id}",
+    params(("id" = String, Path, description = "Task UUID")),
+    responses(
+        (status = 204, description = "Task deleted"),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("SessionCookie" = [])),
+    tag = "me"
+)]
+pub async fn delete_task(
+    State(state): State<Arc<AppState>>,
+    SessionAuth(claims): SessionAuth,
+    Path(task_id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    #[derive(sqlx::FromRow)]
+    struct UserRow {
+        id: String,
+    }
+
+    let user = sqlx::query_as::<_, UserRow>(
+        "SELECT id FROM users WHERE oidc_subject = ?"
+    )
+    .bind(&claims.oidc_subject)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::Unauthorized)?;
+
+    let deleted = sqlx::query(
+        "DELETE FROM tasks WHERE id = ? AND user_id = ?"
+    )
+    .bind(&task_id)
+    .bind(&user.id)
+    .execute(&state.pool)
+    .await?
+    .rows_affected();
+
+    if deleted == 0 {
+        return Err(AppError::NotFound);
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
     get,
     path = "/api/me/token",
     responses(
