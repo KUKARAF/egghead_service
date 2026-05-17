@@ -10,6 +10,7 @@ COPY Cargo.toml Cargo.lock* ./
 COPY src ./src
 COPY migrations ./migrations
 COPY build.rs ./
+COPY admin ./admin
 
 # Get git commit SHA for version (or use "main" if not available)
 ARG VERSION=main
