@@ -31,4 +31,5 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/me/sessions/:id/revoke", post(me::revoke_device_session))
         .route("/devices/register", post(devices::register_device))
         .route("/devices/status/:id", get(devices::get_device_status))
+        .route("/devices/emojis", get(devices::list_emojis))
 }

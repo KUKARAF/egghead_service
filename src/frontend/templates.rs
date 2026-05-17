@@ -70,7 +70,16 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
         .modal.active { display: flex; }
         .modal-content { background: #1a1a1a; padding: 2rem; border-radius: 0.5rem; max-width: 420px; width: 100%; }
         .modal-content h3 { margin-top: 0; }
-        .modal-content input { width: 100%; padding: 0.75rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; font-size: 1.5rem; letter-spacing: 0.25rem; text-align: center; box-sizing: border-box; margin-bottom: 1rem; }
+        .emoji-search { width: 100%; padding: 0.6rem 0.75rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; font-size: 1rem; box-sizing: border-box; margin-bottom: 0.75rem; outline: none; }
+        .emoji-search:focus { border-color: #2563eb; }
+        .emoji-selected { min-height: 3rem; background: #0a0a0a; border: 1px solid #333; border-radius: 0.25rem; display: flex; align-items: center; justify-content: center; gap: 0.25rem; padding: 0.5rem; margin-bottom: 0.75rem; font-size: 1.75rem; letter-spacing: 0.1rem; }
+        .emoji-selected .placeholder { color: #555; font-size: 0.875rem; letter-spacing: normal; }
+        .emoji-selected span { cursor: pointer; padding: 0.1rem 0.2rem; border-radius: 0.25rem; transition: background 0.1s; }
+        .emoji-selected span:hover { background: #333; }
+        .emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.25rem, 1fr)); gap: 2px; max-height: 200px; overflow-y: auto; background: #0a0a0a; border: 1px solid #333; border-radius: 0.25rem; padding: 0.4rem; margin-bottom: 0.75rem; }
+        .emoji-grid button { background: none; border: none; font-size: 1.4rem; cursor: pointer; padding: 0.2rem; border-radius: 0.25rem; line-height: 1; transition: background 0.1s; color: inherit; }
+        .emoji-grid button:hover { background: #333; }
+        .emoji-hint { color: #666; font-size: 0.8rem; margin-bottom: 0.5rem; text-align: center; }
         .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
         .device-name { font-weight: 600; }
         .meta { color: #888; font-size: 0.875rem; }
@@ -108,11 +117,14 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
     <div class="modal" id="emojiModal">
         <div class="modal-content">
             <h3>Confirm Device</h3>
-            <p>Ask the user to read the emoji shown on their screen, then enter it below to confirm.</p>
-            <input id="emojiInput" type="text" placeholder="😀🎉🚀" autocomplete="off" />
+            <p style="margin:0 0 0.75rem;color:#aaa;font-size:0.9rem;">Ask the user which 3 emojis appear on their screen, then select the same ones below.</p>
+            <div class="emoji-selected" id="emojiSelected"><span class="placeholder">Select 3 emojis</span></div>
+            <input class="emoji-search" id="emojiSearch" type="text" placeholder="Search emojis..." autocomplete="off" />
+            <div class="emoji-grid" id="emojiGrid"></div>
+            <div class="emoji-hint">Click to add · Click selected emoji to remove</div>
             <div class="modal-actions">
                 <button class="secondary" onclick="closeEmojiModal()">Cancel</button>
-                <button onclick="submitApproval()">Approve</button>
+                <button id="approveBtn" onclick="submitApproval()" disabled>Approve</button>
             </div>
         </div>
     </div>
@@ -226,12 +238,69 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             }
         }
 
-        function openEmojiModal(id) {
-            pendingApprovalId = id;
-            document.getElementById('emojiInput').value = '';
-            document.getElementById('emojiModal').classList.add('active');
-            setTimeout(() => document.getElementById('emojiInput').focus(), 50);
+        // ---- Emoji Picker ----
+        let emojiPool = [];
+        let selectedEmojis = [];
+
+        async function loadEmojiPool() {
+            if (emojiPool.length) return;
+            const res = await fetch('/api/devices/emojis');
+            emojiPool = await res.json(); // [{e, n}, ...]
         }
+
+        function renderEmojiGrid(filter) {
+            const grid = document.getElementById('emojiGrid');
+            const term = (filter || '').toLowerCase();
+            const matches = term
+                ? emojiPool.filter(x => x.n.toLowerCase().includes(term))
+                : emojiPool;
+            grid.innerHTML = matches.slice(0, 200).map(x =>
+                `<button type="button" title="${esc(x.n)}" onclick="pickEmoji('${x.e}')">${x.e}</button>`
+            ).join('');
+        }
+
+        function renderSelected() {
+            const el = document.getElementById('emojiSelected');
+            if (selectedEmojis.length === 0) {
+                el.innerHTML = '<span class="placeholder">Select 3 emojis</span>';
+            } else {
+                el.innerHTML = selectedEmojis.map((e, i) =>
+                    `<span title="Click to remove" onclick="removeEmoji(${i})">${e}</span>`
+                ).join('');
+            }
+            document.getElementById('approveBtn').disabled = selectedEmojis.length !== 3;
+        }
+
+        function pickEmoji(e) {
+            if (selectedEmojis.length >= 3) return;
+            selectedEmojis.push(e);
+            renderSelected();
+        }
+
+        function removeEmoji(i) {
+            selectedEmojis.splice(i, 1);
+            renderSelected();
+        }
+
+        async function openEmojiModal(id) {
+            pendingApprovalId = id;
+            selectedEmojis = [];
+            await loadEmojiPool();
+            renderSelected();
+            renderEmojiGrid('');
+            document.getElementById('emojiSearch').value = '';
+            document.getElementById('emojiModal').classList.add('active');
+            setTimeout(() => document.getElementById('emojiSearch').focus(), 50);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('emojiSearch').addEventListener('input', e => {
+                renderEmojiGrid(e.target.value);
+            });
+            document.getElementById('emojiSearch').addEventListener('keydown', e => {
+                if (e.key === 'Enter' && selectedEmojis.length === 3) submitApproval();
+            });
+        });
 
         function closeEmojiModal() {
             pendingApprovalId = null;
@@ -239,8 +308,8 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
         }
 
         async function submitApproval() {
-            const confirm = document.getElementById('emojiInput').value.trim();
-            if (!confirm) return;
+            if (selectedEmojis.length !== 3) return;
+            const confirm = selectedEmojis.join('');
             const resp = await fetch(`/api/me/devices/${pendingApprovalId}/approve`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

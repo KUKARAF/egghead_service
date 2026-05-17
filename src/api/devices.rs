@@ -5,7 +5,8 @@ use crate::{
 };
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{header, StatusCode},
+    response::Response,
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,16 @@ pub struct DeviceStatusResponse {
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+}
+
+static EMOJI_JSON: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/admin/emoji.json"));
+
+pub async fn list_emojis() -> Response {
+    Response::builder()
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::CACHE_CONTROL, "public, max-age=86400")
+        .body(axum::body::Body::from(EMOJI_JSON))
+        .unwrap()
 }
 
 pub async fn register_device(
