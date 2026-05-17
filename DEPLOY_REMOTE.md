@@ -1,6 +1,6 @@
 # Remote Deployment Guide: userscripts.osmosis.page
 
-Deploy egghead_service to `rafa@bigboy:/env/osmosis/userscripts` with external Caddy reverse proxy.
+Deploy egghead_service to `rafa@bigboy:~/env/osmosis/userscripts` with external Caddy reverse proxy.
 
 ---
 
@@ -20,15 +20,15 @@ Deploy egghead_service to `rafa@bigboy:/env/osmosis/userscripts` with external C
 
 ```bash
 ssh rafa@bigboy
-cd /env/osmosis/userscripts
+cd ~/env/osmosis/userscripts
 ```
 
 ### 2. Create Directory Structure
 
 ```bash
-mkdir -p /env/osmosis/userscripts
-mkdir -p /env/osmosis/userscripts/data
-cd /env/osmosis/userscripts
+mkdir -p ~/env/osmosis/userscripts
+mkdir -p ~/env/osmosis/userscripts/data
+cd ~/env/osmosis/userscripts
 ```
 
 ### 3. Copy Files from GitHub
@@ -36,7 +36,7 @@ cd /env/osmosis/userscripts
 ```bash
 # Option A: Clone entire repo
 git clone https://github.com/kukaraf/egghead_service.git .
-cd /env/osmosis/userscripts
+cd ~/env/osmosis/userscripts
 
 # Option B: Copy only deployment files
 # wget https://raw.githubusercontent.com/kukaraf/egghead_service/main/docker-compose.prod.yml
@@ -118,7 +118,7 @@ Expected response: `ok`
 ## 📁 Directory Structure
 
 ```
-/env/osmosis/userscripts/
+~/env/osmosis/userscripts/
 ├── docker-compose.prod.yml    # Public config (no secrets)
 ├── .env                        # Secrets (DO NOT COMMIT)
 ├── .env.prod.example           # Template for .env
@@ -298,7 +298,7 @@ docker-compose -f docker-compose.prod.yml logs -f --timestamps egghead
 ### Database Size
 
 ```bash
-du -h /env/osmosis/userscripts/data/egghead.db
+du -h ~/env/osmosis/userscripts/data/egghead.db
 ```
 
 ---
@@ -316,7 +316,7 @@ du -h /env/osmosis/userscripts/data/egghead.db
 ## ✅ Checklist
 
 - [ ] SSH access verified to rafa@bigboy
-- [ ] `/env/osmosis/userscripts` directory created
+- [ ] `~/env/osmosis/userscripts` directory created
 - [ ] `docker-compose.prod.yml` copied
 - [ ] `.env` configured with production secrets
 - [ ] Service started: `docker-compose up -d`

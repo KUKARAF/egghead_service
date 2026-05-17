@@ -158,8 +158,8 @@ For detailed setup with external Caddy reverse proxy, see **DEPLOY_REMOTE.md**.
 Quick summary:
 ```bash
 # On remote server
-mkdir -p ~/env/osmosis/userscripts/data
-cd ~/env/osmosis/userscripts
+mkdir -p ~~/env/osmosis/userscripts/data
+cd ~~/env/osmosis/userscripts
 
 # Copy files (via scp or git)
 git clone https://github.com/KUKARAF/egghead_service.git .
