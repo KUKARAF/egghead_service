@@ -12,8 +12,19 @@ use std::sync::Arc;
 /// Auth via browser session cookie or `Authorization: Bearer <session_token>`.
 pub struct SessionAuth(pub SessionClaims);
 
-/// Auth via `Authorization: Bearer egghead_<token>` for the Chrome extension.
+/// Auth via `Authorization: Bearer egghead_<token>` for the Chrome extension (developer use).
 pub struct ApiTokenAuth {
+    pub user_id: String,
+}
+
+/// Auth via `Authorization: Bearer device_<token>` for the Electron app (end-user devices).
+pub struct DeviceTokenAuth {
+    pub user_id: String,
+}
+
+/// Accepts either `ApiTokenAuth` (egghead_*) or `DeviceTokenAuth` (device_*).
+/// Used on task endpoints so both the Chrome extension and Electron app can submit tasks.
+pub struct AppTokenAuth {
     pub user_id: String,
 }
 
@@ -113,5 +124,137 @@ impl FromRequestParts<Arc<AppState>> for ApiTokenAuth {
         Ok(ApiTokenAuth {
             user_id: row.user_id,
         })
+    }
+}
+
+#[async_trait]
+impl FromRequestParts<Arc<AppState>> for DeviceTokenAuth {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        if state.config.dev_mode {
+            return Ok(DeviceTokenAuth {
+                user_id: "dev-user-id".to_string(),
+            });
+        }
+
+        let token = extract_bearer(parts).ok_or(AppError::Unauthorized)?;
+
+        if !token.starts_with("device_") {
+            return Err(AppError::Unauthorized);
+        }
+
+        let token_hash = hash_key(&token);
+
+        let user_id: Option<String> = sqlx::query_scalar(
+            "SELECT user_id FROM device_tokens
+             WHERE token_hash = ?
+               AND revoked_at IS NULL
+               AND expires_at > datetime('now')",
+        )
+        .bind(&token_hash)
+        .fetch_optional(&state.pool)
+        .await?;
+
+        let user_id = user_id.ok_or(AppError::Unauthorized)?;
+
+        let pool = state.pool.clone();
+        let hash = token_hash.clone();
+        tokio::spawn(async move {
+            let _ = sqlx::query(
+                "UPDATE device_tokens SET last_used_at = datetime('now') WHERE token_hash = ?",
+            )
+            .bind(&hash)
+            .execute(&pool)
+            .await;
+        });
+
+        Ok(DeviceTokenAuth { user_id })
+    }
+}
+
+#[async_trait]
+impl FromRequestParts<Arc<AppState>> for AppTokenAuth {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        if state.config.dev_mode {
+            return Ok(AppTokenAuth {
+                user_id: "dev-user-id".to_string(),
+            });
+        }
+
+        let token = extract_bearer(parts).ok_or(AppError::Unauthorized)?;
+
+        if token.starts_with("egghead_") {
+            let token_hash = hash_key(&token);
+
+            #[derive(sqlx::FromRow)]
+            struct Row {
+                user_id: String,
+                token_id: String,
+            }
+
+            let row = sqlx::query_as::<_, Row>(
+                "SELECT user_id, id as token_id FROM api_tokens
+                 WHERE token_hash = ? AND revoked_at IS NULL",
+            )
+            .bind(&token_hash)
+            .fetch_optional(&state.pool)
+            .await?
+            .ok_or(AppError::Unauthorized)?;
+
+            let pool = state.pool.clone();
+            let token_id = row.token_id.clone();
+            tokio::spawn(async move {
+                let _ = sqlx::query(
+                    "UPDATE api_tokens SET last_used_at = datetime('now') WHERE id = ?",
+                )
+                .bind(&token_id)
+                .execute(&pool)
+                .await;
+            });
+
+            return Ok(AppTokenAuth {
+                user_id: row.user_id,
+            });
+        }
+
+        if token.starts_with("device_") {
+            let token_hash = hash_key(&token);
+
+            let user_id: Option<String> = sqlx::query_scalar(
+                "SELECT user_id FROM device_tokens
+                 WHERE token_hash = ?
+                   AND revoked_at IS NULL
+                   AND expires_at > datetime('now')",
+            )
+            .bind(&token_hash)
+            .fetch_optional(&state.pool)
+            .await?;
+
+            let user_id = user_id.ok_or(AppError::Unauthorized)?;
+
+            let pool = state.pool.clone();
+            let hash = token_hash.clone();
+            tokio::spawn(async move {
+                let _ = sqlx::query(
+                    "UPDATE device_tokens SET last_used_at = datetime('now') WHERE token_hash = ?",
+                )
+                .bind(&hash)
+                .execute(&pool)
+                .await;
+            });
+
+            return Ok(AppTokenAuth { user_id });
+        }
+
+        Err(AppError::Unauthorized)
     }
 }

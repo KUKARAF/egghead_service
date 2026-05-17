@@ -16,6 +16,96 @@ use serde::Serialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
+#[derive(Debug, Serialize)]
+pub struct DeviceSessionView {
+    pub id: String,
+    pub device_name: String,
+    pub created_at: String,
+    pub expires_at: String,
+    pub last_used_at: Option<String>,
+}
+
+pub async fn list_device_sessions(
+    State(state): State<Arc<AppState>>,
+    SessionAuth(claims): SessionAuth,
+) -> Result<Json<Vec<DeviceSessionView>>, AppError> {
+    // Find the user for this OIDC session (may not exist if OIDC user never had a device).
+    let user_id: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE oidc_subject = ?",
+    )
+    .bind(&claims.oidc_subject)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let Some(user_id) = user_id else {
+        return Ok(Json(vec![]));
+    };
+
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        id: String,
+        device_name: String,
+        created_at: String,
+        expires_at: String,
+        last_used_at: Option<String>,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT id, device_name, created_at, expires_at, last_used_at
+         FROM device_tokens
+         WHERE user_id = ? AND revoked_at IS NULL AND expires_at > datetime('now')
+         ORDER BY created_at DESC",
+    )
+    .bind(&user_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| DeviceSessionView {
+                id: r.id,
+                device_name: r.device_name,
+                created_at: r.created_at,
+                expires_at: r.expires_at,
+                last_used_at: r.last_used_at,
+            })
+            .collect(),
+    ))
+}
+
+pub async fn revoke_device_session(
+    State(state): State<Arc<AppState>>,
+    SessionAuth(claims): SessionAuth,
+    Path(token_id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let user_id: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE oidc_subject = ?",
+    )
+    .bind(&claims.oidc_subject)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let Some(user_id) = user_id else {
+        return Err(AppError::NotFound);
+    };
+
+    let updated = sqlx::query(
+        "UPDATE device_tokens SET revoked_at = datetime('now')
+         WHERE id = ? AND user_id = ? AND revoked_at IS NULL",
+    )
+    .bind(&token_id)
+    .bind(&user_id)
+    .execute(&state.pool)
+    .await?
+    .rows_affected();
+
+    if updated == 0 {
+        return Err(AppError::NotFound);
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ApiTokenResponse {
     pub has_token: bool,

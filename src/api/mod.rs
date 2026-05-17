@@ -1,3 +1,4 @@
+pub mod devices;
 pub mod html_chunks;
 pub mod me;
 pub mod tasks;
@@ -23,4 +24,11 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/me/tasks/:id", delete(me::delete_task))
         .route("/me/token", get(me::get_api_token))
         .route("/me/token/regenerate", post(me::regenerate_api_token))
+        .route("/me/devices", get(devices::list_device_requests))
+        .route("/me/devices/:id/approve", post(devices::approve_device_request))
+        .route("/me/devices/:id/reject", post(devices::reject_device_request))
+        .route("/me/sessions", get(me::list_device_sessions))
+        .route("/me/sessions/:id/revoke", post(me::revoke_device_session))
+        .route("/devices/register", post(devices::register_device))
+        .route("/devices/status/:id", get(devices::get_device_status))
 }

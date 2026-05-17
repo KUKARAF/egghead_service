@@ -1,4 +1,4 @@
-use crate::{auth::extractors::ApiTokenAuth, error::AppError, state::AppState};
+use crate::{auth::extractors::AppTokenAuth, error::AppError, state::AppState};
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -21,7 +21,7 @@ pub struct UploadChunkResponse {
 
 pub async fn upload_chunk(
     State(state): State<Arc<AppState>>,
-    ApiTokenAuth { .. }: ApiTokenAuth,
+    AppTokenAuth { .. }: AppTokenAuth,
     Json(req): Json<UploadChunkRequest>,
 ) -> Result<Json<UploadChunkResponse>, AppError> {
     if req.chunk_index < 0 || req.total_chunks < 1 || req.chunk_index >= req.total_chunks {

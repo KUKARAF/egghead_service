@@ -1,6 +1,6 @@
 use crate::{
     ai::generate::with_userscript_header,
-    auth::extractors::ApiTokenAuth,
+    auth::extractors::AppTokenAuth,
     error::AppError,
     models::task::{Task, FileAttachment},
     state::AppState,
@@ -54,7 +54,7 @@ pub struct CreateTaskResponse {
 )]
 pub async fn create_task(
     State(state): State<Arc<AppState>>,
-    ApiTokenAuth { user_id, .. }: ApiTokenAuth,
+    AppTokenAuth { user_id, .. }: AppTokenAuth,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<(StatusCode, Json<CreateTaskResponse>), AppError> {
     // Resolve HTML: either inline or assembled from pre-uploaded chunks
@@ -170,7 +170,7 @@ pub struct GetTaskResponse {
 )]
 pub async fn get_task(
     State(state): State<Arc<AppState>>,
-    ApiTokenAuth { user_id, .. }: ApiTokenAuth,
+    AppTokenAuth { user_id, .. }: AppTokenAuth,
     Path(task_id): Path<String>,
 ) -> Result<Json<GetTaskResponse>, AppError> {
     let task = sqlx::query_as::<_, Task>(

@@ -36,4 +36,19 @@ async fn run_cleanup(state: &Arc<AppState>) {
         Err(e) => tracing::error!("cleanup: session expiry error: {e}"),
         _ => {}
     }
+
+    // Expire pending device registrations whose 10-minute window has passed.
+    match sqlx::query(
+        "UPDATE device_registrations SET status = 'expired'
+         WHERE status = 'pending' AND expires_at <= datetime('now')",
+    )
+    .execute(&state.pool)
+    .await
+    {
+        Ok(r) if r.rows_affected() > 0 => {
+            tracing::info!(count = r.rows_affected(), "expired pending device registrations");
+        }
+        Err(e) => tracing::error!("cleanup: device registration expiry error: {e}"),
+        _ => {}
+    }
 }
