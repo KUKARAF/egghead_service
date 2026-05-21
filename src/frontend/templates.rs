@@ -101,6 +101,7 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             <div class="tab active" onclick="switchTab('tasks')">Tasks</div>
             <div class="tab" onclick="switchTab('devices')" id="tab-devices">Pending Devices</div>
             <div class="tab" onclick="switchTab('sessions')">Sessions</div>
+            <div class="tab" onclick="switchTab('scripts')">Scripts</div>
         </div>
 
         <div id="panel-tasks" class="panel active">
@@ -111,6 +112,52 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
         </div>
         <div id="panel-sessions" class="panel">
             <div class="loading">Loading sessions...</div>
+        </div>
+        <div id="panel-scripts" class="panel">
+            <div class="loading">Loading scripts...</div>
+        </div>
+    </div>
+
+    <div class="modal" id="scriptModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <h3 id="scriptModalTitle">Create Script</h3>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <div>
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Name *</label>
+                    <input type="text" id="scriptName" style="width: 100%; padding: 0.5rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; box-sizing: border-box;" placeholder="e.g., Dark Mode Enabler" />
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 600;">URL *</label>
+                    <input type="text" id="scriptUrl" style="width: 100%; padding: 0.5rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; box-sizing: border-box;" placeholder="e.g., https://example.com" />
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Prompt *</label>
+                    <textarea id="scriptPrompt" style="width: 100%; padding: 0.5rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; box-sizing: border-box; min-height: 80px; font-family: monospace;" placeholder="Original prompt used to generate this script..."></textarea>
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Script Code</label>
+                    <textarea id="scriptCode" style="width: 100%; padding: 0.5rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; box-sizing: border-box; min-height: 150px; font-family: monospace; font-size: 0.85rem;" placeholder="// ==UserScript==&#10;// @name        My Script&#10;// ==/UserScript=="></textarea>
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Violentmonkey Metadata (JSON)</label>
+                    <textarea id="scriptMetadata" style="width: 100%; padding: 0.5rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; box-sizing: border-box; min-height: 80px; font-family: monospace; font-size: 0.85rem;" placeholder="{&#10;  &quot;name&quot;: &quot;My Script&quot;,&#10;  &quot;match&quot;: [&quot;*://*.example.com/*&quot;]&#10;}"></textarea>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="secondary" onclick="closeScriptModal()">Cancel</button>
+                <button onclick="saveScript()">Save Script</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="assignModal">
+        <div class="modal-content">
+            <h3>Assign Script to Devices</h3>
+            <div id="assignModalContent"></div>
+            <div class="modal-actions">
+                <button class="secondary" onclick="closeAssignModal()">Cancel</button>
+                <button id="assignSaveBtn">Assign</button>
+            </div>
         </div>
     </div>
 
@@ -142,6 +189,7 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             if (tab === 'tasks') loadTasks();
             else if (tab === 'devices') loadDevices();
             else if (tab === 'sessions') loadSessions();
+            else if (tab === 'scripts') loadScripts();
         }
 
         // ---- Tasks ----
@@ -374,12 +422,176 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
+        // ---- Scripts ----
+        async function loadScripts() {
+            const el = document.getElementById('panel-scripts');
+            try {
+                const resp = await fetch('/api/me/scripts');
+                if (!resp.ok) throw new Error('Failed to load scripts');
+                const scripts = await resp.json();
+
+                if (scripts.length === 0) {
+                    el.innerHTML = '<p class="empty">No scripts yet. <a href="javascript:openScriptModal()">Create one</a></p>';
+                    return;
+                }
+
+                let html = '<div style="margin-bottom: 1rem;"><button onclick="openScriptModal()">+ New Script</button></div>';
+                html += '<table><thead><tr><th>Name</th><th>URL</th><th>Devices</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+                for (const script of scripts) {
+                    const date = new Date(script.created_at).toLocaleDateString();
+                    const deviceCount = script.device_ids?.length || 0;
+                    const id = script.id;
+                    html += '<tr>';
+                    html += '<td><strong>' + esc(script.name) + '</strong></td>';
+                    html += '<td><small>' + esc(script.url) + '</small></td>';
+                    html += '<td>' + deviceCount + ' device(s)</td>';
+                    html += '<td class="meta">' + date + '</td>';
+                    html += '<td class="actions">';
+                    html += '<button onclick="editScript(\'' + id + '\')">Edit</button>';
+                    html += '<button onclick="assignDevices(\'' + id + '\')">Assign</button>';
+                    html += '<button class="danger" onclick="deleteScript(\'' + id + '\')">Delete</button>';
+                    html += '</td>';
+                    html += '</tr>';
+                }
+                html += '</tbody></table>';
+                el.innerHTML = html;
+            } catch (e) {
+                el.innerHTML = '<p style="color:#f44">Error: ' + e.message + '</p>';
+            }
+        }
+
+        let currentScriptId = null;
+
+        function openScriptModal() {
+            currentScriptId = null;
+            document.getElementById('scriptName').value = '';
+            document.getElementById('scriptPrompt').value = '';
+            document.getElementById('scriptUrl').value = '';
+            document.getElementById('scriptCode').value = '';
+            document.getElementById('scriptMetadata').value = '';
+            document.getElementById('scriptModalTitle').textContent = 'Create Script';
+            document.getElementById('scriptModal').classList.add('active');
+        }
+
+        async function editScript(id) {
+            try {
+                const resp = await fetch(`/api/me/scripts/${id}`);
+                if (!resp.ok) throw new Error('Failed to load script');
+                const script = await resp.json();
+                currentScriptId = id;
+                document.getElementById('scriptName').value = script.name;
+                document.getElementById('scriptPrompt').value = script.prompt;
+                document.getElementById('scriptUrl').value = script.url;
+                document.getElementById('scriptCode').value = script.script_code;
+                document.getElementById('scriptMetadata').value = script.violentmonkey_metadata || '';
+                document.getElementById('scriptModalTitle').textContent = 'Edit Script';
+                document.getElementById('scriptModal').classList.add('active');
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        function closeScriptModal() {
+            document.getElementById('scriptModal').classList.remove('active');
+        }
+
+        async function saveScript() {
+            const name = document.getElementById('scriptName').value.trim();
+            const prompt = document.getElementById('scriptPrompt').value.trim();
+            const url = document.getElementById('scriptUrl').value.trim();
+            const script_code = document.getElementById('scriptCode').value;
+            const violentmonkey_metadata = document.getElementById('scriptMetadata').value || null;
+
+            if (!name || !prompt || !url) {
+                alert('Please fill in all required fields');
+                return;
+            }
+
+            const method = currentScriptId ? 'PUT' : 'POST';
+            const endpoint = currentScriptId ? `/api/me/scripts/${currentScriptId}` : '/api/me/scripts';
+
+            try {
+                const resp = await fetch(endpoint, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, prompt, url, script_code, violentmonkey_metadata }),
+                });
+                if (!resp.ok) throw new Error('Failed to save script');
+                closeScriptModal();
+                loadScripts();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function deleteScript(id) {
+            if (!confirm('Delete this script?')) return;
+            try {
+                const resp = await fetch(`/api/me/scripts/${id}`, { method: 'DELETE' });
+                if (!resp.ok) throw new Error('Failed to delete script');
+                loadScripts();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function assignDevices(scriptId) {
+            try {
+                const devResp = await fetch('/api/me/sessions');
+                if (!devResp.ok) throw new Error('Failed to load devices');
+                const devices = await devResp.json();
+
+                const scriptResp = await fetch(`/api/me/scripts/${scriptId}`);
+                if (!scriptResp.ok) throw new Error('Failed to load script');
+                const script = await scriptResp.json();
+
+                let html = '<label style="display: block; margin-bottom: 1rem;"><strong>Assign to devices:</strong></label>';
+                for (const device of devices) {
+                    const checked = script.device_ids.includes(device.id) ? 'checked' : '';
+                    html += `<label style="display: block; margin-bottom: 0.5rem;">
+                        <input type="checkbox" data-device-id="${device.id}" ${checked} />
+                        ${esc(device.device_name)}
+                    </label>`;
+                }
+
+                const modal = document.getElementById('assignModal');
+                document.getElementById('assignModalContent').innerHTML = html;
+                document.getElementById('assignSaveBtn').onclick = () => saveAssignments(scriptId);
+                modal.classList.add('active');
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        function closeAssignModal() {
+            document.getElementById('assignModal').classList.remove('active');
+        }
+
+        async function saveAssignments(scriptId) {
+            const checkboxes = document.querySelectorAll('#assignModalContent input[type="checkbox"]:checked');
+            const device_ids = Array.from(checkboxes).map(cb => cb.dataset.deviceId);
+
+            try {
+                const resp = await fetch(`/api/me/scripts/${scriptId}/assign-devices`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_ids }),
+                });
+                if (!resp.ok) throw new Error('Failed to assign devices');
+                closeAssignModal();
+                loadScripts();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
         // Initial load
         loadTasks();
         setInterval(() => {
             if (currentTab === 'tasks') loadTasks();
             else if (currentTab === 'devices') loadDevices();
             else if (currentTab === 'sessions') loadSessions();
+            else if (currentTab === 'scripts') loadScripts();
         }, 5000);
 
         // Poll for pending device badge even when not on that tab
