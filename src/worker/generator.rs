@@ -29,7 +29,7 @@ async fn poll_approved(state: &Arc<AppState>) -> anyhow::Result<()> {
     let rows = sqlx::query_as::<_, TaskRow>(
         "SELECT id FROM tasks
          WHERE status = 'awaiting_approval' AND approved_at IS NOT NULL
-         LIMIT 5",
+         ORDER BY approved_at ASC LIMIT 5",
     )
     .fetch_all(&state.pool)
     .await?;

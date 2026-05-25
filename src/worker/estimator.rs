@@ -20,7 +20,7 @@ async fn poll_pending(state: &Arc<AppState>) -> anyhow::Result<()> {
     }
 
     let rows = sqlx::query_as::<_, TaskRow>(
-        "SELECT id FROM tasks WHERE status = 'pending' LIMIT 5"
+        "SELECT id FROM tasks WHERE status = 'pending' ORDER BY created_at ASC LIMIT 5"
     )
     .fetch_all(&state.pool)
     .await?;

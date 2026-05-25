@@ -8,6 +8,11 @@ struct GithubCommit {
 }
 
 #[derive(Deserialize)]
+struct GithubContentResponse {
+    sha: String,
+}
+
+#[derive(Deserialize)]
 struct GithubPushResponse {
     commit: GithubCommit,
 }
@@ -30,6 +35,42 @@ fn extract_site(url: &str) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
+async fn get_file_sha(
+    http: &reqwest::Client,
+    token: &str,
+    repo: &str,
+    path: &str,
+) -> Result<Option<String>> {
+    let url = format!("https://api.github.com/repos/{repo}/contents/{path}");
+
+    let resp = http
+        .get(&url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "egghead-service")
+        .send()
+        .await
+        .context("GitHub API request failed")?;
+
+    if resp.status() == 404 {
+        return Ok(None);
+    }
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(anyhow!("GitHub API error {status}: {text}"));
+    }
+
+    let content: GithubContentResponse = resp
+        .json()
+        .await
+        .context("failed to parse GitHub API response")?;
+
+    Ok(Some(content.sha))
+}
+
 fn build_toml(task_id: &str, tab_url: &str, prompt: &str, status: &str) -> String {
     let escaped_prompt = prompt.replace('\\', "\\\\").replace('"', "\\\"");
     format!(
@@ -48,10 +89,16 @@ async fn put_file(
     let url = format!("https://api.github.com/repos/{repo}/contents/{path}");
     let encoded = STANDARD.encode(content.as_bytes());
 
-    let body = serde_json::json!({
+    let sha = get_file_sha(http, token, repo, path).await?;
+
+    let mut body = serde_json::json!({
         "message": message,
         "content": encoded,
     });
+
+    if let Some(sha) = sha {
+        body["sha"] = serde_json::json!(sha);
+    }
 
     let resp = http
         .put(&url)

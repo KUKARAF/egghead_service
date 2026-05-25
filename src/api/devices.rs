@@ -235,21 +235,22 @@ pub async fn approve_device_request(
     let mut tx = state.pool.begin().await?;
 
     // Find-or-create user by email. Prefer any existing user (OIDC or device) for this email.
-    let new_user_id = Uuid::new_v4().to_string();
-    sqlx::query(
-        "INSERT INTO users (id, oidc_subject, email)
-         VALUES (?, NULL, ?)
-         ON CONFLICT DO NOTHING",
-    )
-    .bind(&new_user_id)
-    .bind(&reg.email)
-    .execute(&mut *tx)
-    .await?;
-
-    let user_id: String = sqlx::query_scalar("SELECT id FROM users WHERE email = ? LIMIT 1")
+    let user_id: String = match sqlx::query_scalar("SELECT id FROM users WHERE email = ? LIMIT 1")
         .bind(&reg.email)
-        .fetch_one(&mut *tx)
-        .await?;
+        .fetch_optional(&mut *tx)
+        .await?
+    {
+        Some(id) => id,
+        None => {
+            let new_user_id = Uuid::new_v4().to_string();
+            sqlx::query("INSERT INTO users (id, oidc_subject, email) VALUES (?, NULL, ?)")
+                .bind(&new_user_id)
+                .bind(&reg.email)
+                .execute(&mut *tx)
+                .await?;
+            new_user_id
+        }
+    };
 
     // Revoke existing device tokens for this user so only one is active at a time.
     sqlx::query(
