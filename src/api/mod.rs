@@ -1,3 +1,4 @@
+pub mod browsing_sessions;
 pub mod devices;
 pub mod html_chunks;
 pub mod me;
@@ -40,4 +41,17 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/devices/register", post(devices::register_device))
         .route("/devices/status/:id", get(devices::get_device_status))
         .route("/devices/emojis", get(devices::list_emojis))
+        // Browsing sessions
+        .route("/me/browsing-sessions", get(browsing_sessions::list_browsing_sessions))
+        .route("/me/browsing-sessions", post(browsing_sessions::create_browsing_session))
+        .route("/me/browsing-sessions/:id", delete(browsing_sessions::delete_browsing_session))
+        .route("/me/browsing-sessions/:id/pages", post(browsing_sessions::add_session_page))
+        .route("/me/browsing-sessions/:id/pages/:page_id", put(browsing_sessions::update_session_page))
+        .route("/me/browsing-sessions/:id/pages/:page_id", delete(browsing_sessions::remove_session_page))
+        // Error reporting (API token auth — called from extension)
+        .route("/sessions/:id/errors", post(browsing_sessions::report_session_error))
+        // Error listing (session auth — dashboard)
+        .route("/me/errors", get(browsing_sessions::list_all_errors))
+        .route("/me/errors/:id", get(browsing_sessions::get_session_error_html))
+        .route("/me/errors/:id", delete(browsing_sessions::delete_session_error))
 }

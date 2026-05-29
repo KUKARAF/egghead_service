@@ -100,8 +100,10 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
         <div class="tabs">
             <div class="tab active" onclick="switchTab('tasks')">Tasks</div>
             <div class="tab" onclick="switchTab('devices')" id="tab-devices">Pending Devices</div>
-            <div class="tab" onclick="switchTab('sessions')">Sessions</div>
+            <div class="tab" onclick="switchTab('sessions')">Device Sessions</div>
             <div class="tab" onclick="switchTab('scripts')">Scripts</div>
+            <div class="tab" onclick="switchTab('browsing-sessions')">Browsing Sessions</div>
+            <div class="tab" onclick="switchTab('errors')">Errors</div>
         </div>
 
         <div id="panel-tasks" class="panel active">
@@ -115,6 +117,12 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
         </div>
         <div id="panel-scripts" class="panel">
             <div class="loading">Loading scripts...</div>
+        </div>
+        <div id="panel-browsing-sessions" class="panel">
+            <div class="loading">Loading browsing sessions...</div>
+        </div>
+        <div id="panel-errors" class="panel">
+            <div class="loading">Loading errors...</div>
         </div>
     </div>
 
@@ -161,6 +169,34 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
         </div>
     </div>
 
+    <div class="modal" id="sessionModal">
+        <div class="modal-content" style="max-width: 420px;">
+            <h3 id="sessionModalTitle">New Browsing Session</h3>
+            <div>
+                <label style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Session Name *</label>
+                <input type="text" id="sessionNameInput" style="width: 100%; padding: 0.5rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; box-sizing: border-box;" placeholder="e.g., Google Testing" onkeydown="if(event.key==='Enter') saveSession()" />
+            </div>
+            <div class="modal-actions">
+                <button class="secondary" onclick="closeSessionModal()">Cancel</button>
+                <button onclick="saveSession()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="pageModal">
+        <div class="modal-content" style="max-width: 480px;">
+            <h3 id="pageModalTitle">Add Page</h3>
+            <div>
+                <label style="display: block; margin-bottom: 0.25rem; font-weight: 600;">URL *</label>
+                <input type="text" id="pageUrlInput" style="width: 100%; padding: 0.5rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; box-sizing: border-box;" placeholder="e.g., https://google.com" onkeydown="if(event.key==='Enter') savePage()" />
+            </div>
+            <div class="modal-actions">
+                <button class="secondary" onclick="closePageModal()">Cancel</button>
+                <button onclick="savePage()">Save</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal" id="emojiModal">
         <div class="modal-content">
             <h3>Confirm Device</h3>
@@ -190,6 +226,8 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             else if (tab === 'devices') loadDevices();
             else if (tab === 'sessions') loadSessions();
             else if (tab === 'scripts') loadScripts();
+            else if (tab === 'browsing-sessions') loadBrowsingSessions();
+            else if (tab === 'errors') loadErrors();
         }
 
         // ---- Tasks ----
@@ -585,6 +623,183 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             }
         }
 
+        // ---- Browsing Sessions ----
+        async function loadBrowsingSessions() {
+            const el = document.getElementById('panel-browsing-sessions');
+            try {
+                const resp = await fetch('/api/me/browsing-sessions');
+                if (!resp.ok) throw new Error('Failed to load browsing sessions');
+                const sessions = await resp.json();
+
+                let html = '<div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; align-items: center;">';
+                html += '<button onclick="openNewSessionModal()">+ New Session</button>';
+                html += '</div>';
+
+                if (sessions.length === 0) {
+                    html += '<p class="empty">No browsing sessions yet.</p>';
+                } else {
+                    for (const s of sessions) {
+                        const date = new Date(s.created_at).toLocaleDateString();
+                        html += `<div style="background:#1a1a1a;border-radius:0.5rem;padding:1rem;margin-bottom:1rem;">`;
+                        html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">`;
+                        html += `<strong style="font-size:1.05rem;">${esc(s.name)}</strong>`;
+                        html += `<div class="actions">`;
+                        html += `<span class="meta" style="margin-right:0.5rem;">${date}</span>`;
+                        html += `<button class="danger" onclick="deleteSession('${s.id}')">Delete</button>`;
+                        html += `</div></div>`;
+
+                        html += `<div style="margin-bottom:0.5rem;">`;
+                        if (s.pages.length === 0) {
+                            html += `<p class="meta" style="margin:0 0 0.5rem;">No pages yet.</p>`;
+                        } else {
+                            for (const p of s.pages) {
+                                html += `<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;padding:0.4rem;background:#0a0a0a;border-radius:0.25rem;">`;
+                                html += `<span style="flex:1;font-family:monospace;font-size:0.875rem;word-break:break-all;">${esc(p.url)}</span>`;
+                                html += `<button class="secondary" onclick="openEditPageModal('${s.id}','${p.id}','${esc(p.url).replace(/'/g,"\\'")}')" style="padding:0.2rem 0.5rem;font-size:0.8rem;">Edit</button>`;
+                                html += `<button class="danger" onclick="removePage('${s.id}','${p.id}')" style="padding:0.2rem 0.5rem;font-size:0.8rem;">Remove</button>`;
+                                html += `</div>`;
+                            }
+                        }
+                        html += `<button class="secondary" onclick="openAddPageModal('${s.id}')" style="margin-top:0.25rem;">+ Add Page</button>`;
+                        html += `</div></div>`;
+                    }
+                }
+
+                el.innerHTML = html;
+            } catch (e) {
+                el.innerHTML = `<p style="color:#f44">Error: ${e.message}</p>`;
+            }
+        }
+
+        async function deleteSession(id) {
+            if (!confirm('Delete this browsing session and all its pages?')) return;
+            const resp = await fetch(`/api/me/browsing-sessions/${id}`, { method: 'DELETE' });
+            if (resp.ok) loadBrowsingSessions();
+            else alert('Failed to delete session');
+        }
+
+        async function removePage(sessionId, pageId) {
+            if (!confirm('Remove this page?')) return;
+            const resp = await fetch(`/api/me/browsing-sessions/${sessionId}/pages/${pageId}`, { method: 'DELETE' });
+            if (resp.ok) loadBrowsingSessions();
+            else alert('Failed to remove page');
+        }
+
+        let pendingSessionId = null;
+        let pendingPageId = null;
+
+        function openNewSessionModal() {
+            document.getElementById('sessionModalTitle').textContent = 'New Browsing Session';
+            document.getElementById('sessionNameInput').value = '';
+            document.getElementById('sessionModal').classList.add('active');
+            setTimeout(() => document.getElementById('sessionNameInput').focus(), 50);
+        }
+
+        function closeSessionModal() {
+            document.getElementById('sessionModal').classList.remove('active');
+        }
+
+        async function saveSession() {
+            const name = document.getElementById('sessionNameInput').value.trim();
+            if (!name) { alert('Please enter a session name'); return; }
+            const resp = await fetch('/api/me/browsing-sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name }),
+            });
+            if (resp.ok) { closeSessionModal(); loadBrowsingSessions(); }
+            else alert('Failed to create session');
+        }
+
+        function openAddPageModal(sessionId) {
+            pendingSessionId = sessionId;
+            pendingPageId = null;
+            document.getElementById('pageModalTitle').textContent = 'Add Page';
+            document.getElementById('pageUrlInput').value = '';
+            document.getElementById('pageModal').classList.add('active');
+            setTimeout(() => document.getElementById('pageUrlInput').focus(), 50);
+        }
+
+        function openEditPageModal(sessionId, pageId, url) {
+            pendingSessionId = sessionId;
+            pendingPageId = pageId;
+            document.getElementById('pageModalTitle').textContent = 'Edit Page';
+            document.getElementById('pageUrlInput').value = url;
+            document.getElementById('pageModal').classList.add('active');
+            setTimeout(() => document.getElementById('pageUrlInput').focus(), 50);
+        }
+
+        function closePageModal() {
+            document.getElementById('pageModal').classList.remove('active');
+            pendingSessionId = null;
+            pendingPageId = null;
+        }
+
+        async function savePage() {
+            const url = document.getElementById('pageUrlInput').value.trim();
+            if (!url) { alert('Please enter a URL'); return; }
+            let resp;
+            if (pendingPageId) {
+                resp = await fetch(`/api/me/browsing-sessions/${pendingSessionId}/pages/${pendingPageId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url }),
+                });
+            } else {
+                resp = await fetch(`/api/me/browsing-sessions/${pendingSessionId}/pages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url }),
+                });
+            }
+            if (resp.ok) { closePageModal(); loadBrowsingSessions(); }
+            else alert('Failed to save page');
+        }
+
+        // ---- Errors ----
+        async function loadErrors() {
+            const el = document.getElementById('panel-errors');
+            try {
+                const resp = await fetch('/api/me/errors');
+                if (!resp.ok) throw new Error('Failed to load errors');
+                const errors = await resp.json();
+
+                if (errors.length === 0) {
+                    el.innerHTML = '<p class="empty">No error reports yet.</p>';
+                    return;
+                }
+
+                let html = '<table><thead><tr><th>Session</th><th>URL</th><th>Reported</th><th>Actions</th></tr></thead><tbody>';
+                for (const e of errors) {
+                    const date = new Date(e.reported_at).toLocaleString();
+                    html += `<tr>
+                        <td>${esc(e.session_name)}</td>
+                        <td style="font-family:monospace;font-size:0.875rem;word-break:break-all;">${esc(e.url)}</td>
+                        <td class="meta">${date}</td>
+                        <td class="actions">
+                            <button class="secondary" onclick="viewErrorHtml('${e.id}')">View HTML</button>
+                            <button class="danger" onclick="deleteError('${e.id}')">Delete</button>
+                        </td>
+                    </tr>`;
+                }
+                html += '</tbody></table>';
+                el.innerHTML = html;
+            } catch (e) {
+                el.innerHTML = `<p style="color:#f44">Error: ${e.message}</p>`;
+            }
+        }
+
+        async function deleteError(id) {
+            if (!confirm('Delete this error report?')) return;
+            const resp = await fetch(`/api/me/errors/${id}`, { method: 'DELETE' });
+            if (resp.ok) loadErrors();
+            else alert('Failed to delete error report');
+        }
+
+        function viewErrorHtml(errorId) {
+            window.open(`/api/me/errors/${errorId}`, '_blank');
+        }
+
         // Initial load
         loadTasks();
         setInterval(() => {
@@ -592,6 +807,8 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             else if (currentTab === 'devices') loadDevices();
             else if (currentTab === 'sessions') loadSessions();
             else if (currentTab === 'scripts') loadScripts();
+            else if (currentTab === 'browsing-sessions') loadBrowsingSessions();
+            else if (currentTab === 'errors') loadErrors();
         }, 5000);
 
         // Poll for pending device badge even when not on that tab

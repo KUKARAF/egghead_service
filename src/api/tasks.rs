@@ -54,7 +54,7 @@ pub struct CreateTaskResponse {
 )]
 pub async fn create_task(
     State(state): State<Arc<AppState>>,
-    AppTokenAuth { user_id, .. }: AppTokenAuth,
+    AppTokenAuth { user_id, device_token_id }: AppTokenAuth,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<(StatusCode, Json<CreateTaskResponse>), AppError> {
     // Resolve HTML: either inline or assembled from pre-uploaded chunks
@@ -116,11 +116,12 @@ pub async fn create_task(
     let files_json = req.files.as_ref().map(|f| serde_json::to_string(f).unwrap_or_default());
 
     sqlx::query(
-        "INSERT INTO tasks (id, user_id, tab_url, prompt, page_html, action_recording, files_json, submission_token, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))"
+        "INSERT INTO tasks (id, user_id, device_token_id, tab_url, prompt, page_html, action_recording, files_json, submission_token, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))"
     )
     .bind(&task_id)
     .bind(&user_id)
+    .bind(&device_token_id)
     .bind(&req.tab_url)
     .bind(&req.prompt)
     .bind(&page_html)

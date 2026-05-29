@@ -8,6 +8,7 @@ use crate::{
 };
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
+use uuid::Uuid;
 
 pub async fn run(state: Arc<AppState>) {
     let poll_secs = state.config.worker_poll_interval_secs;
@@ -72,6 +73,8 @@ async fn poll_approved(state: &Arc<AppState>) -> anyhow::Result<()> {
 async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<()> {
     #[derive(sqlx::FromRow)]
     struct TaskData {
+        user_id: String,
+        device_token_id: Option<String>,
         tab_url: String,
         prompt: String,
         page_html: String,
@@ -81,7 +84,7 @@ async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
     }
 
     let task = sqlx::query_as::<_, TaskData>(
-        "SELECT t.tab_url, t.prompt, t.page_html, t.action_recording, t.files_json, u.email as user_email
+        "SELECT t.user_id, t.device_token_id, t.tab_url, t.prompt, t.page_html, t.action_recording, t.files_json, u.email as user_email
          FROM tasks t
          JOIN users u ON u.id = t.user_id
          WHERE t.id = ?",
@@ -126,6 +129,39 @@ async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
     .bind(task_id)
     .execute(&state.pool)
     .await?;
+
+    // Auto-save the generated script into the user's userscripts library
+    let userscript_id = Uuid::new_v4().to_string();
+    let saved = sqlx::query(
+        "INSERT INTO userscripts (id, user_id, name, prompt, url, script_code, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+    )
+    .bind(&userscript_id)
+    .bind(&task.user_id)
+    .bind(&resp.name)
+    .bind(&task.prompt)
+    .bind(&task.tab_url)
+    .bind(&full_script)
+    .execute(&state.pool)
+    .await;
+
+    if let Err(e) = saved {
+        tracing::warn!(task_id = %task_id, "failed to auto-save userscript: {e:#}");
+    } else if let Some(ref device_token_id) = task.device_token_id {
+        let assignment_id = Uuid::new_v4().to_string();
+        if let Err(e) = sqlx::query(
+            "INSERT OR IGNORE INTO script_device_assignments (id, script_id, device_token_id)
+             VALUES (?, ?, ?)",
+        )
+        .bind(&assignment_id)
+        .bind(&userscript_id)
+        .bind(device_token_id)
+        .execute(&state.pool)
+        .await
+        {
+            tracing::warn!(task_id = %task_id, "failed to assign script to device: {e:#}");
+        }
+    }
 
     tracing::info!(task_id = %task_id, script_name = %resp.name, "generation complete");
 

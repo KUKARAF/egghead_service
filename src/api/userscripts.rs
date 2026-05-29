@@ -1,5 +1,5 @@
 use crate::{
-    auth::extractors::SessionAuth,
+    auth::extractors::{SessionAuth, UserAuth},
     error::AppError,
     models::userscript::DeviceAssignment,
     state::AppState,
@@ -51,7 +51,7 @@ pub struct UserscriptResponse {
 
 pub async fn list_userscripts(
     State(state): State<Arc<AppState>>,
-    SessionAuth(_claims): SessionAuth,
+    UserAuth { user_id, device_token_id }: UserAuth,
 ) -> Result<Json<Vec<UserscriptResponse>>, AppError> {
     #[derive(sqlx::FromRow)]
     struct ScriptRow {
@@ -65,14 +65,30 @@ pub async fn list_userscripts(
         updated_at: String,
     }
 
-    let scripts: Vec<ScriptRow> = sqlx::query_as(
-        "SELECT id, name, prompt, url, script_code, violentmonkey_metadata, created_at, updated_at
-         FROM userscripts
-         WHERE user_id = (SELECT id FROM users WHERE oidc_subject IS NOT NULL LIMIT 1)
-         ORDER BY created_at DESC",
-    )
-    .fetch_all(&state.pool)
-    .await?;
+    let scripts: Vec<ScriptRow> = if let Some(ref dtid) = device_token_id {
+        // Device: only return scripts assigned to this specific device token
+        sqlx::query_as(
+            "SELECT u.id, u.name, u.prompt, u.url, u.script_code, u.violentmonkey_metadata, u.created_at, u.updated_at
+             FROM userscripts u
+             JOIN script_device_assignments sda ON sda.script_id = u.id
+             WHERE sda.device_token_id = ?
+             ORDER BY u.created_at DESC",
+        )
+        .bind(dtid)
+        .fetch_all(&state.pool)
+        .await?
+    } else {
+        // Dashboard: return all scripts for this user
+        sqlx::query_as(
+            "SELECT id, name, prompt, url, script_code, violentmonkey_metadata, created_at, updated_at
+             FROM userscripts
+             WHERE user_id = ?
+             ORDER BY created_at DESC",
+        )
+        .bind(&user_id)
+        .fetch_all(&state.pool)
+        .await?
+    };
 
     let mut response = Vec::new();
 

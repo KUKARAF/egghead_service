@@ -1,6 +1,6 @@
 use crate::{
     auth::{
-        extractors::SessionAuth,
+        extractors::{SessionAuth, UserAuth},
         token::generate_api_token,
     },
     error::AppError,
@@ -212,29 +212,16 @@ pub async fn get_task_detail(
 )]
 pub async fn approve_task(
     State(state): State<Arc<AppState>>,
-    SessionAuth(claims): SessionAuth,
+    UserAuth { user_id, .. }: UserAuth,
     Path(task_id): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    #[derive(sqlx::FromRow)]
-    struct UserRow {
-        id: String,
-    }
-
-    let user = sqlx::query_as::<_, UserRow>(
-        "SELECT id FROM users WHERE oidc_subject = ?"
-    )
-    .bind(&claims.oidc_subject)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or(AppError::Unauthorized)?;
-
     let updated = sqlx::query(
         "UPDATE tasks
          SET approved_at = datetime('now'), updated_at = datetime('now')
          WHERE id = ? AND user_id = ? AND status = 'awaiting_approval'"
     )
     .bind(&task_id)
-    .bind(&user.id)
+    .bind(&user_id)
     .execute(&state.pool)
     .await?
     .rows_affected();
@@ -260,29 +247,16 @@ pub async fn approve_task(
 )]
 pub async fn reject_task(
     State(state): State<Arc<AppState>>,
-    SessionAuth(claims): SessionAuth,
+    UserAuth { user_id, .. }: UserAuth,
     Path(task_id): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    #[derive(sqlx::FromRow)]
-    struct UserRow {
-        id: String,
-    }
-
-    let user = sqlx::query_as::<_, UserRow>(
-        "SELECT id FROM users WHERE oidc_subject = ?"
-    )
-    .bind(&claims.oidc_subject)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or(AppError::Unauthorized)?;
-
     let updated = sqlx::query(
         "UPDATE tasks
          SET rejected_at = datetime('now'), status = 'rejected', updated_at = datetime('now')
          WHERE id = ? AND user_id = ? AND status = 'awaiting_approval'"
     )
     .bind(&task_id)
-    .bind(&user.id)
+    .bind(&user_id)
     .execute(&state.pool)
     .await?
     .rows_affected();
