@@ -146,10 +146,7 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                     <label style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Script Code</label>
                     <textarea id="scriptCode" style="width: 100%; padding: 0.5rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; box-sizing: border-box; min-height: 150px; font-family: monospace; font-size: 0.85rem;" placeholder="// ==UserScript==&#10;// @name        My Script&#10;// ==/UserScript=="></textarea>
                 </div>
-                <div>
-                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Violentmonkey Metadata (JSON)</label>
-                    <textarea id="scriptMetadata" style="width: 100%; padding: 0.5rem; background: #0a0a0a; border: 1px solid #444; border-radius: 0.25rem; color: #fff; box-sizing: border-box; min-height: 80px; font-family: monospace; font-size: 0.85rem;" placeholder="{&#10;  &quot;name&quot;: &quot;My Script&quot;,&#10;  &quot;match&quot;: [&quot;*://*.example.com/*&quot;]&#10;}"></textarea>
-                </div>
+
             </div>
             <div class="modal-actions">
                 <button class="secondary" onclick="closeScriptModal()">Cancel</button>
@@ -506,7 +503,6 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             document.getElementById('scriptPrompt').value = '';
             document.getElementById('scriptUrl').value = '';
             document.getElementById('scriptCode').value = '';
-            document.getElementById('scriptMetadata').value = '';
             document.getElementById('scriptModalTitle').textContent = 'Create Script';
             document.getElementById('scriptModal').classList.add('active');
         }
@@ -521,7 +517,6 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                 document.getElementById('scriptPrompt').value = script.prompt;
                 document.getElementById('scriptUrl').value = script.url;
                 document.getElementById('scriptCode').value = script.script_code;
-                document.getElementById('scriptMetadata').value = script.violentmonkey_metadata || '';
                 document.getElementById('scriptModalTitle').textContent = 'Edit Script';
                 document.getElementById('scriptModal').classList.add('active');
             } catch (e) {
@@ -538,7 +533,6 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             const prompt = document.getElementById('scriptPrompt').value.trim();
             const url = document.getElementById('scriptUrl').value.trim();
             const script_code = document.getElementById('scriptCode').value;
-            const violentmonkey_metadata = document.getElementById('scriptMetadata').value || null;
 
             if (!name || !prompt || !url) {
                 alert('Please fill in all required fields');
@@ -552,7 +546,7 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                 const resp = await fetch(endpoint, {
                     method,
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, prompt, url, script_code, violentmonkey_metadata }),
+                    body: JSON.stringify({ name, prompt, url, script_code }),
                 });
                 if (!resp.ok) throw new Error('Failed to save script');
                 closeScriptModal();

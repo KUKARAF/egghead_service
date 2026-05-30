@@ -19,7 +19,6 @@ pub struct CreateUserscriptRequest {
     pub prompt: String,
     pub url: String,
     pub script_code: String,
-    pub violentmonkey_metadata: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -28,7 +27,6 @@ pub struct UpdateUserscriptRequest {
     pub prompt: Option<String>,
     pub url: Option<String>,
     pub script_code: Option<String>,
-    pub violentmonkey_metadata: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -43,7 +41,6 @@ pub struct UserscriptResponse {
     pub prompt: String,
     pub url: String,
     pub script_code: String,
-    pub violentmonkey_metadata: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub device_ids: Vec<String>,
@@ -60,15 +57,13 @@ pub async fn list_userscripts(
         prompt: String,
         url: String,
         script_code: String,
-        violentmonkey_metadata: Option<String>,
         created_at: String,
         updated_at: String,
     }
 
     let scripts: Vec<ScriptRow> = if let Some(ref dtid) = device_token_id {
-        // Device: only return scripts assigned to this specific device token
         sqlx::query_as(
-            "SELECT u.id, u.name, u.prompt, u.url, u.script_code, u.violentmonkey_metadata, u.created_at, u.updated_at
+            "SELECT u.id, u.name, u.prompt, u.url, u.script_code, u.created_at, u.updated_at
              FROM userscripts u
              JOIN script_device_assignments sda ON sda.script_id = u.id
              WHERE sda.device_token_id = ?
@@ -78,9 +73,8 @@ pub async fn list_userscripts(
         .fetch_all(&state.pool)
         .await?
     } else {
-        // Dashboard: return all scripts for this user
         sqlx::query_as(
-            "SELECT id, name, prompt, url, script_code, violentmonkey_metadata, created_at, updated_at
+            "SELECT id, name, prompt, url, script_code, created_at, updated_at
              FROM userscripts
              WHERE user_id = ?
              ORDER BY created_at DESC",
@@ -108,7 +102,6 @@ pub async fn list_userscripts(
             prompt: script.prompt,
             url: script.url,
             script_code: script.script_code,
-            violentmonkey_metadata: script.violentmonkey_metadata,
             created_at: script.created_at,
             updated_at: script.updated_at,
             device_ids,
@@ -150,8 +143,8 @@ pub async fn create_userscript(
     let now = chrono::Utc::now().to_rfc3339();
 
     sqlx::query(
-        "INSERT INTO userscripts (id, user_id, name, prompt, url, script_code, violentmonkey_metadata, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO userscripts (id, user_id, name, prompt, url, script_code, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&user_id)
@@ -159,7 +152,6 @@ pub async fn create_userscript(
     .bind(prompt)
     .bind(url)
     .bind(&req.script_code)
-    .bind(&req.violentmonkey_metadata)
     .bind(&now)
     .bind(&now)
     .execute(&state.pool)
@@ -173,7 +165,6 @@ pub async fn create_userscript(
             prompt: prompt.to_string(),
             url: url.to_string(),
             script_code: req.script_code,
-            violentmonkey_metadata: req.violentmonkey_metadata,
             created_at: now.clone(),
             updated_at: now,
             device_ids: Vec::new(),
@@ -193,13 +184,12 @@ pub async fn get_userscript(
         prompt: String,
         url: String,
         script_code: String,
-        violentmonkey_metadata: Option<String>,
         created_at: String,
         updated_at: String,
     }
 
     let script: ScriptRow = sqlx::query_as(
-        "SELECT id, name, prompt, url, script_code, violentmonkey_metadata, created_at, updated_at
+        "SELECT id, name, prompt, url, script_code, created_at, updated_at
          FROM userscripts
          WHERE id = ? AND user_id = (SELECT id FROM users WHERE oidc_subject IS NOT NULL LIMIT 1)",
     )
@@ -223,7 +213,6 @@ pub async fn get_userscript(
         prompt: script.prompt,
         url: script.url,
         script_code: script.script_code,
-        violentmonkey_metadata: script.violentmonkey_metadata,
         created_at: script.created_at,
         updated_at: script.updated_at,
         device_ids,
@@ -236,8 +225,8 @@ pub async fn update_userscript(
     Path(script_id): Path<String>,
     Json(req): Json<UpdateUserscriptRequest>,
 ) -> Result<Json<UserscriptResponse>, AppError> {
-    let script: (String, String, String, String, String, Option<String>, String) = sqlx::query_as(
-        "SELECT id, name, prompt, url, script_code, violentmonkey_metadata, created_at
+    let script: (String, String, String, String, String, String) = sqlx::query_as(
+        "SELECT id, name, prompt, url, script_code, created_at
          FROM userscripts
          WHERE id = ? AND user_id = (SELECT id FROM users WHERE oidc_subject IS NOT NULL LIMIT 1)",
     )
@@ -251,18 +240,16 @@ pub async fn update_userscript(
     let prompt = req.prompt.as_deref().unwrap_or(&script.2);
     let url = req.url.as_deref().unwrap_or(&script.3);
     let script_code = req.script_code.as_deref().unwrap_or(&script.4);
-    let violentmonkey_metadata = req.violentmonkey_metadata.or(script.5);
 
     sqlx::query(
         "UPDATE userscripts
-         SET name = ?, prompt = ?, url = ?, script_code = ?, violentmonkey_metadata = ?, updated_at = ?
+         SET name = ?, prompt = ?, url = ?, script_code = ?, updated_at = ?
          WHERE id = ?",
     )
     .bind(name)
     .bind(prompt)
     .bind(url)
     .bind(script_code)
-    .bind(&violentmonkey_metadata)
     .bind(&now)
     .bind(&script_id)
     .execute(&state.pool)
@@ -283,8 +270,7 @@ pub async fn update_userscript(
         prompt: prompt.to_string(),
         url: url.to_string(),
         script_code: script_code.to_string(),
-        violentmonkey_metadata,
-        created_at: script.6,
+        created_at: script.5,
         updated_at: now,
         device_ids,
     }))
@@ -316,7 +302,6 @@ pub async fn assign_devices_to_script(
     Path(script_id): Path<String>,
     Json(req): Json<AssignDevicesRequest>,
 ) -> Result<StatusCode, AppError> {
-    // Verify script belongs to user
     let script_exists: bool = sqlx::query_scalar(
         "SELECT COUNT(*) > 0
          FROM userscripts
@@ -332,13 +317,11 @@ pub async fn assign_devices_to_script(
 
     let mut tx = state.pool.begin().await?;
 
-    // Remove existing assignments
     sqlx::query("DELETE FROM script_device_assignments WHERE script_id = ?")
         .bind(&script_id)
         .execute(&mut *tx)
         .await?;
 
-    // Add new assignments
     for device_id in &req.device_ids {
         let assignment_id = Uuid::new_v4().to_string();
         sqlx::query(
@@ -362,7 +345,6 @@ pub async fn get_script_devices(
     SessionAuth(_claims): SessionAuth,
     Path(script_id): Path<String>,
 ) -> Result<Json<Vec<DeviceAssignment>>, AppError> {
-    // Verify script belongs to user
     let script_exists: bool = sqlx::query_scalar(
         "SELECT COUNT(*) > 0
          FROM userscripts

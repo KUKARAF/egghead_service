@@ -8,7 +8,6 @@ pub struct Userscript {
     pub prompt: String,
     pub url: String,
     pub script_code: String,
-    pub violentmonkey_metadata: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -20,7 +19,6 @@ pub struct UserscriptWithDevices {
     pub prompt: String,
     pub url: String,
     pub script_code: String,
-    pub violentmonkey_metadata: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub device_ids: Vec<String>,
