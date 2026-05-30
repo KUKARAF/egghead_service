@@ -60,8 +60,8 @@ pub async fn call_generate(
 }
 
 /// Prepends the ViolentMonkey ==UserScript== header to script code.
-pub fn with_userscript_header(name: &str, match_pattern: &str, code: &str) -> String {
+pub fn with_userscript_header(name: &str, tab_url: &str, match_pattern: &str, code: &str) -> String {
     format!(
-        "// ==UserScript==\n// @name         {name}\n// @namespace    https://egghead.osmosis.page\n// @version      1.0\n// @match        {match_pattern}\n// @grant        none\n// ==/UserScript==\n\n{code}"
+        "// ==UserScript==\n// @name         {name}\n// @namespace    https://egghead.osmosis.page\n// @version      1.0\n// @url          {tab_url}\n// @match        {match_pattern}\n// @run-at       document-end\n// @grant        none\n// ==/UserScript==\n\n{code}"
     )
 }

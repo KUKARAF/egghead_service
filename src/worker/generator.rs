@@ -112,7 +112,7 @@ async fn run_generation(state: &Arc<AppState>, task_id: &str) -> anyhow::Result<
     )
     .await?;
 
-    let full_script = with_userscript_header(&resp.name, &resp.match_pattern, &resp.script_code);
+    let full_script = with_userscript_header(&resp.name, &task.tab_url, &resp.match_pattern, &resp.script_code);
 
     sqlx::query(
         "UPDATE tasks

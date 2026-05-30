@@ -1,5 +1,4 @@
 use crate::{
-    ai::generate::with_userscript_header,
     auth::extractors::AppTokenAuth,
     error::AppError,
     models::task::{Task, FileAttachment},
@@ -183,18 +182,7 @@ pub async fn get_task(
     .await?
     .ok_or(AppError::NotFound)?;
 
-    let script_code = if task.status == "done" {
-        task.script_code.as_ref().map(|code| {
-            with_userscript_header(
-                &task.script_name.clone().unwrap_or_default(),
-                &task.match_pattern.clone().unwrap_or_default(),
-                code,
-            )
-        })
-    } else {
-        None
-    };
-
+    let done = task.status == "done";
     Ok(Json(GetTaskResponse {
         id: task.id,
         tab_url: task.tab_url,
@@ -203,7 +191,7 @@ pub async fn get_task(
         estimated_price_pln: task.estimated_price_pln,
         price_rationale: task.price_rationale,
         script_name: task.script_name,
-        script_code,
+        script_code: if done { task.script_code } else { None },
         match_pattern: task.match_pattern,
         error_message: task.error_message,
         created_at: task.created_at,
@@ -233,18 +221,7 @@ pub async fn get_task_by_token(
     .await?
     .ok_or(AppError::NotFound)?;
 
-    let script_code = if task.status == "done" {
-        task.script_code.as_ref().map(|code| {
-            with_userscript_header(
-                &task.script_name.clone().unwrap_or_default(),
-                &task.match_pattern.clone().unwrap_or_default(),
-                code,
-            )
-        })
-    } else {
-        None
-    };
-
+    let done = task.status == "done";
     Ok(Json(GetTaskResponse {
         id: task.id,
         tab_url: task.tab_url,
@@ -253,7 +230,7 @@ pub async fn get_task_by_token(
         estimated_price_pln: task.estimated_price_pln,
         price_rationale: task.price_rationale,
         script_name: task.script_name,
-        script_code,
+        script_code: if done { task.script_code } else { None },
         match_pattern: task.match_pattern,
         error_message: task.error_message,
         created_at: task.created_at,
