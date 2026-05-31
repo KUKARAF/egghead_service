@@ -29,3 +29,12 @@ pub struct DeviceAssignment {
     pub device_id: String,
     pub device_name: String,
 }
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ScriptMessage {
+    pub id: String,
+    pub script_id: String,
+    pub role: String,
+    pub content: String,
+    pub created_at: String,
+}

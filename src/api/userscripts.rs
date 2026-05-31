@@ -1,7 +1,7 @@
 use crate::{
     auth::extractors::{SessionAuth, UserAuth},
     error::AppError,
-    models::userscript::DeviceAssignment,
+    models::userscript::{DeviceAssignment, ScriptMessage},
     state::AppState,
 };
 use axum::{
@@ -338,6 +338,145 @@ pub async fn assign_devices_to_script(
     tx.commit().await?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RefineScriptRequest {
+    pub prompt: String,
+    pub page_html: Option<String>,
+    pub html_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RefineScriptResponse {
+    pub id: String,
+    pub status: String,
+    pub submission_token: String,
+}
+
+pub async fn refine_script(
+    State(state): State<Arc<AppState>>,
+    UserAuth { user_id, device_token_id }: UserAuth,
+    Path(script_id): Path<String>,
+    Json(req): Json<RefineScriptRequest>,
+) -> Result<(StatusCode, Json<RefineScriptResponse>), AppError> {
+    let tab_url: Option<String> = sqlx::query_scalar(
+        "SELECT url FROM userscripts WHERE id = ? AND user_id = ?",
+    )
+    .bind(&script_id)
+    .bind(&user_id)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let tab_url = tab_url.ok_or(AppError::NotFound)?;
+
+    let page_html = if let Some(ref html_id) = req.html_id {
+        #[derive(sqlx::FromRow)]
+        struct HtmlChunkRow {
+            chunk_index: i64,
+            total_chunks: i64,
+            content: String,
+        }
+
+        let chunks: Vec<HtmlChunkRow> = sqlx::query_as(
+            "SELECT chunk_index, total_chunks, content FROM html_uploads
+             WHERE html_id = ? ORDER BY chunk_index",
+        )
+        .bind(html_id)
+        .fetch_all(&state.pool)
+        .await?;
+
+        if chunks.is_empty() {
+            return Err(AppError::BadRequest(
+                format!("html_id '{}' not found or no chunks uploaded", html_id),
+            ));
+        }
+
+        let total = chunks[0].total_chunks;
+        if chunks.len() as i64 != total {
+            return Err(AppError::BadRequest(format!(
+                "incomplete upload: got {} of {} chunks",
+                chunks.len(),
+                total
+            )));
+        }
+
+        let html = chunks.into_iter().map(|c| c.content).collect::<String>();
+        sqlx::query("DELETE FROM html_uploads WHERE html_id = ?")
+            .bind(html_id)
+            .execute(&state.pool)
+            .await?;
+        html
+    } else if let Some(html) = req.page_html {
+        html
+    } else {
+        return Err(AppError::BadRequest("either page_html or html_id is required".into()));
+    };
+
+    let task_id = Uuid::new_v4().to_string();
+    let submission_token = format!("task_{}", Uuid::new_v4());
+
+    sqlx::query(
+        "INSERT INTO tasks (id, user_id, device_token_id, tab_url, prompt, page_html, script_id, submission_token, status, approved_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_approval', datetime('now'), datetime('now'), datetime('now'))",
+    )
+    .bind(&task_id)
+    .bind(&user_id)
+    .bind(&device_token_id)
+    .bind(&tab_url)
+    .bind(&req.prompt)
+    .bind(&page_html)
+    .bind(&script_id)
+    .bind(&submission_token)
+    .execute(&state.pool)
+    .await?;
+
+    let msg_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO script_messages (id, script_id, role, content) VALUES (?, ?, 'user', ?)",
+    )
+    .bind(&msg_id)
+    .bind(&script_id)
+    .bind(&req.prompt)
+    .execute(&state.pool)
+    .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(RefineScriptResponse {
+            id: task_id,
+            status: "awaiting_approval".to_string(),
+            submission_token,
+        }),
+    ))
+}
+
+pub async fn list_script_messages(
+    State(state): State<Arc<AppState>>,
+    UserAuth { user_id, .. }: UserAuth,
+    Path(script_id): Path<String>,
+) -> Result<Json<Vec<ScriptMessage>>, AppError> {
+    let script_exists: bool = sqlx::query_scalar(
+        "SELECT COUNT(*) > 0 FROM userscripts WHERE id = ? AND user_id = ?",
+    )
+    .bind(&script_id)
+    .bind(&user_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    if !script_exists {
+        return Err(AppError::NotFound);
+    }
+
+    let messages: Vec<ScriptMessage> = sqlx::query_as(
+        "SELECT id, script_id, role, content, created_at FROM script_messages
+         WHERE script_id = ? ORDER BY created_at ASC",
+    )
+    .bind(&script_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(messages))
 }
 
 pub async fn get_script_devices(

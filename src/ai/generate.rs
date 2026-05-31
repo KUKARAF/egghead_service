@@ -59,6 +59,54 @@ pub async fn call_generate(
     Ok(resp)
 }
 
+/// Iterative generation: takes existing conversation history (role, content pairs) and a new prompt.
+/// The first user message includes page HTML; subsequent ones are plain follow-ups.
+pub async fn call_generate_iterative(
+    client: &OpenRouterClient<'_>,
+    tab_url: &str,
+    new_prompt: &str,
+    page_html: &str,
+    history: &[(String, String)], // (role, content) from script_messages, oldest first
+) -> Result<GenerateResponse> {
+    let mut messages: Vec<(String, String)> = Vec::new();
+
+    if history.is_empty() {
+        // No history: treat like a fresh generation
+        let user_msg = format!("Page URL: {tab_url}\nUser request: {new_prompt}\nPage HTML:\n---\n{page_html}\n---");
+        messages.push(("user".to_string(), user_msg));
+    } else {
+        // First message gets the fresh HTML; history follows; new prompt last
+        let first_user = format!("Page URL: {tab_url}\nUser request: {}\nPage HTML:\n---\n{page_html}\n---",
+            history.iter().find(|(r, _)| r == "user").map(|(_, c)| c.as_str()).unwrap_or(new_prompt)
+        );
+        messages.push(("user".to_string(), first_user));
+        // Append remaining history after the first user message
+        let mut skip_first_user = true;
+        for (role, content) in history {
+            if skip_first_user && role == "user" {
+                skip_first_user = false;
+                continue;
+            }
+            messages.push((role.clone(), content.clone()));
+        }
+        messages.push(("user".to_string(), new_prompt.to_string()));
+    }
+
+    let text = client.complete_with_messages("google/gemma-4-31b-it", SYSTEM_PROMPT, messages, 4096).await?;
+
+    let json_str = text
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+
+    let resp: GenerateResponse =
+        serde_json::from_str(json_str).context("failed to parse generate JSON from AI response")?;
+
+    Ok(resp)
+}
+
 /// Prepends the ViolentMonkey ==UserScript== header to script code.
 pub fn with_userscript_header(name: &str, tab_url: &str, match_pattern: &str, code: &str) -> String {
     format!(

@@ -29,6 +29,7 @@ pub struct Task {
     pub worker_started_at: Option<String>,
     pub git_sha: Option<String>,
     pub device_token_id: Option<String>,
+    pub script_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

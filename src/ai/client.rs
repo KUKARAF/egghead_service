@@ -109,6 +109,26 @@ impl<'a> OpenRouterClient<'a> {
         self.send(&body).await
     }
 
+    pub async fn complete_with_messages(
+        &self,
+        model: &str,
+        system: &str,
+        messages: Vec<(String, String)>, // (role, content) pairs
+        max_tokens: u32,
+    ) -> Result<String> {
+        let mut msgs = vec![Message { role: "system".to_string(), content: system.to_string() }];
+        for (role, content) in messages {
+            msgs.push(Message { role, content });
+        }
+        let body = RequestBody {
+            model: model.to_string(),
+            max_tokens,
+            messages: msgs,
+            response_format: None,
+        };
+        self.send(&body).await
+    }
+
     pub async fn complete_with_schema(
         &self,
         model: &str,
