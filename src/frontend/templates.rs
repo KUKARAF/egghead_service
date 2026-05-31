@@ -149,6 +149,7 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
 
             </div>
             <div class="modal-actions">
+                <button class="secondary" id="btnCopyHtml" onclick="copyScriptHtml()" style="display:none;" title="Copy the page HTML that was captured when this script was generated">Copy HTML</button>
                 <button class="secondary" onclick="closeScriptModal()">Cancel</button>
                 <button onclick="saveScript()">Save Script</button>
             </div>
@@ -504,6 +505,7 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             document.getElementById('scriptUrl').value = '';
             document.getElementById('scriptCode').value = '';
             document.getElementById('scriptModalTitle').textContent = 'Create Script';
+            document.getElementById('btnCopyHtml').style.display = 'none';
             document.getElementById('scriptModal').classList.add('active');
         }
 
@@ -518,9 +520,29 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                 document.getElementById('scriptUrl').value = script.url;
                 document.getElementById('scriptCode').value = script.script_code;
                 document.getElementById('scriptModalTitle').textContent = 'Edit Script';
+                document.getElementById('btnCopyHtml').style.display = '';
                 document.getElementById('scriptModal').classList.add('active');
             } catch (e) {
                 alert('Error: ' + e.message);
+            }
+        }
+
+        async function copyScriptHtml() {
+            if (!currentScriptId) return;
+            const btn = document.getElementById('btnCopyHtml');
+            btn.textContent = 'Copying…';
+            btn.disabled = true;
+            try {
+                const resp = await fetch(`/api/me/scripts/${currentScriptId}/html`);
+                if (!resp.ok) throw new Error(resp.status === 404 ? 'No captured HTML for this script yet' : 'Failed to fetch HTML');
+                const html = await resp.text();
+                await navigator.clipboard.writeText(html);
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = 'Copy HTML'; btn.disabled = false; }, 2000);
+            } catch (e) {
+                alert(e.message);
+                btn.textContent = 'Copy HTML';
+                btn.disabled = false;
             }
         }
 

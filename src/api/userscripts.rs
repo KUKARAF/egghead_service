@@ -451,6 +451,24 @@ pub async fn refine_script(
     ))
 }
 
+pub async fn get_script_html(
+    State(state): State<Arc<AppState>>,
+    SessionAuth(_claims): SessionAuth,
+    Path(script_id): Path<String>,
+) -> Result<String, AppError> {
+    let html: Option<String> = sqlx::query_scalar(
+        "SELECT t.page_html FROM tasks t
+         WHERE t.script_id = ?
+           AND t.user_id = (SELECT id FROM users WHERE oidc_subject IS NOT NULL LIMIT 1)
+         ORDER BY t.created_at DESC LIMIT 1",
+    )
+    .bind(&script_id)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    html.ok_or(AppError::NotFound)
+}
+
 pub async fn list_script_messages(
     State(state): State<Arc<AppState>>,
     UserAuth { user_id, .. }: UserAuth,

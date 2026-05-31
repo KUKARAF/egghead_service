@@ -40,6 +40,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/me/scripts/:id/assign-devices", post(userscripts::assign_devices_to_script))
         .route("/me/scripts/:id/messages", post(userscripts::refine_script))
         .route("/me/scripts/:id/messages", get(userscripts::list_script_messages))
+        .route("/me/scripts/:id/html", get(userscripts::get_script_html))
         .route("/devices/register", post(devices::register_device))
         .route("/devices/status/:id", get(devices::get_device_status))
         .route("/devices/emojis", get(devices::list_emojis))
