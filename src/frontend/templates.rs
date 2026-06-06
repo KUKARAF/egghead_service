@@ -623,9 +623,18 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
 
         async function assignDevices(scriptId) {
             try {
-                const devResp = await fetch('/api/me/sessions');
-                if (!devResp.ok) throw new Error('Failed to load devices');
-                const devices = await devResp.json();
+                let devices = [];
+                const adminResp = await fetch('/api/admin/users');
+                if (adminResp.ok) {
+                    const users = await adminResp.json();
+                    devices = users.flatMap(u =>
+                        u.device_sessions.map(s => ({ ...s, owner_email: u.email }))
+                    );
+                } else {
+                    const devResp = await fetch('/api/me/sessions');
+                    if (!devResp.ok) throw new Error('Failed to load devices');
+                    devices = await devResp.json();
+                }
 
                 const scriptResp = await fetch(`/api/me/scripts/${scriptId}`);
                 if (!scriptResp.ok) throw new Error('Failed to load script');
@@ -634,9 +643,12 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                 let html = '<label style="display: block; margin-bottom: 1rem;"><strong>Assign to devices:</strong></label>';
                 for (const device of devices) {
                     const checked = script.device_ids.includes(device.id) ? 'checked' : '';
+                    const label = device.owner_email
+                        ? `${esc(device.device_name)} <small style="color:#888">(${esc(device.owner_email)})</small>`
+                        : esc(device.device_name);
                     html += `<label style="display: block; margin-bottom: 0.5rem;">
                         <input type="checkbox" data-device-id="${device.id}" ${checked} />
-                        ${esc(device.device_name)}
+                        ${label}
                     </label>`;
                 }
 
