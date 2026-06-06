@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod browsing_sessions;
 pub mod devices;
 pub mod html_chunks;
@@ -44,6 +45,9 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/devices/register", post(devices::register_device))
         .route("/devices/status/:id", get(devices::get_device_status))
         .route("/devices/emojis", get(devices::list_emojis))
+        // Superuser admin endpoints
+        .route("/admin/users", get(admin::list_all_users))
+        .route("/admin/sessions/:id/revoke", post(admin::revoke_any_session))
         // Browsing sessions
         .route("/me/browsing-sessions", get(browsing_sessions::list_browsing_sessions))
         .route("/me/browsing-sessions", post(browsing_sessions::create_browsing_session))

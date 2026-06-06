@@ -2,13 +2,27 @@ use crate::{
     auth::token::{generate_session_token, hash_key},
     error::AppError,
 };
+use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use uuid::Uuid;
+
+// SHA-256 of each superuser email address (never store plaintext).
+const SUPERUSER_EMAIL_HASHES: &[&str] = &[
+    "ac96178ea219f8f2a4488f467b52f3b10410ada21a83625edd75e9de6410a968", // rafal.kuka94@gmail.com
+    "804d16db39c3c195d71c2a52b554d22266c88795560a182a4facd1bbcf2a611e", // hi@osmosis.page
+];
 
 pub struct SessionClaims {
     pub id: String,
     pub oidc_subject: String,
     pub email: String,
+}
+
+impl SessionClaims {
+    pub fn is_superuser(&self) -> bool {
+        let hash = hex::encode(Sha256::digest(self.email.as_bytes()));
+        SUPERUSER_EMAIL_HASHES.contains(&hash.as_str())
+    }
 }
 
 /// Creates a new 10-hour browser session, returns plaintext token once.

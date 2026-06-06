@@ -168,8 +168,11 @@ pub struct ApproveDeviceRequest {
 
 pub async fn list_device_requests(
     State(state): State<Arc<AppState>>,
-    SessionAuth(_claims): SessionAuth,
+    SessionAuth(claims): SessionAuth,
 ) -> Result<Json<Vec<DeviceRequestView>>, AppError> {
+    if !claims.is_superuser() {
+        return Err(AppError::Forbidden("superuser only".into()));
+    }
     #[derive(sqlx::FromRow)]
     struct Row {
         id: String,
@@ -205,10 +208,13 @@ pub async fn list_device_requests(
 
 pub async fn approve_device_request(
     State(state): State<Arc<AppState>>,
-    SessionAuth(_claims): SessionAuth,
+    SessionAuth(claims): SessionAuth,
     Path(reg_id): Path<String>,
     Json(body): Json<ApproveDeviceRequest>,
 ) -> Result<StatusCode, AppError> {
+    if !claims.is_superuser() {
+        return Err(AppError::Forbidden("superuser only".into()));
+    }
     #[derive(sqlx::FromRow)]
     struct RegRow {
         email: String,
@@ -298,9 +304,12 @@ pub async fn approve_device_request(
 
 pub async fn reject_device_request(
     State(state): State<Arc<AppState>>,
-    SessionAuth(_claims): SessionAuth,
+    SessionAuth(claims): SessionAuth,
     Path(reg_id): Path<String>,
 ) -> Result<StatusCode, AppError> {
+    if !claims.is_superuser() {
+        return Err(AppError::Forbidden("superuser only".into()));
+    }
     let updated = sqlx::query(
         "UPDATE device_registrations
          SET status = 'rejected', rejected_at = datetime('now')
