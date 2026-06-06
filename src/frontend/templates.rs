@@ -418,6 +418,37 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
         async function loadSessions() {
             const el = document.getElementById('panel-sessions');
             try {
+                // Superusers get all sessions via /api/admin/users; others get their own.
+                const adminResp = await fetch('/api/admin/users');
+                if (adminResp.ok) {
+                    const users = await adminResp.json();
+                    const sessions = users.flatMap(u =>
+                        u.device_sessions.map(s => ({ ...s, owner_email: u.email }))
+                    );
+                    if (sessions.length === 0) {
+                        el.innerHTML = '<p class="empty">No active device sessions.</p>';
+                        return;
+                    }
+                    let html = '<table><thead><tr><th>Device</th><th>Owner</th><th>Created</th><th>Expires</th><th>Last Used</th><th>Actions</th></tr></thead><tbody>';
+                    for (const s of sessions) {
+                        const created = new Date(s.created_at).toLocaleDateString();
+                        const expires = new Date(s.expires_at).toLocaleDateString();
+                        const lastUsed = s.last_used_at ? new Date(s.last_used_at).toLocaleDateString() : '—';
+                        html += `<tr>
+                            <td class="device-name">${esc(s.device_name)}</td>
+                            <td class="meta">${esc(s.owner_email)}</td>
+                            <td class="meta">${created}</td>
+                            <td class="meta">${expires}</td>
+                            <td class="meta">${lastUsed}</td>
+                            <td><button class="danger" onclick="revokeSession('${s.id}', true)">Revoke</button></td>
+                        </tr>`;
+                    }
+                    html += '</tbody></table>';
+                    el.innerHTML = html;
+                    return;
+                }
+
+                // Normal user fallback.
                 const resp = await fetch('/api/me/sessions');
                 if (!resp.ok) throw new Error('Failed to load sessions');
                 const sessions = await resp.json();
@@ -447,9 +478,10 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             }
         }
 
-        async function revokeSession(id) {
+        async function revokeSession(id, isAdmin = false) {
             if (!confirm('Revoke this device session? The device will need to re-register.')) return;
-            const resp = await fetch(`/api/me/sessions/${id}/revoke`, { method: 'POST' });
+            const url = isAdmin ? `/api/admin/sessions/${id}/revoke` : `/api/me/sessions/${id}/revoke`;
+            const resp = await fetch(url, { method: 'POST' });
             if (resp.ok) loadSessions();
             else alert('Failed to revoke session');
         }
