@@ -11,6 +11,88 @@ use axum::{
 use serde::Serialize;
 use std::sync::Arc;
 
+// ── Browsing sessions ────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct AdminPageResponse {
+    pub id: String,
+    pub url: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AdminBrowsingSessionResponse {
+    pub id: String,
+    pub name: String,
+    pub created_at: String,
+    pub owner_email: String,
+    pub pages: Vec<AdminPageResponse>,
+}
+
+pub async fn list_all_browsing_sessions(
+    State(state): State<Arc<AppState>>,
+    SessionAuth(claims): SessionAuth,
+) -> Result<Json<Vec<AdminBrowsingSessionResponse>>, AppError> {
+    if !claims.is_superuser() {
+        return Err(AppError::Forbidden("superuser only".into()));
+    }
+
+    #[derive(sqlx::FromRow)]
+    struct SessionRow {
+        id: String,
+        name: String,
+        created_at: String,
+        owner_email: String,
+    }
+
+    #[derive(sqlx::FromRow)]
+    struct PageRow {
+        id: String,
+        session_id: String,
+        url: String,
+        created_at: String,
+    }
+
+    let sessions = sqlx::query_as::<_, SessionRow>(
+        "SELECT bs.id, bs.name, bs.created_at, u.email AS owner_email
+         FROM browsing_sessions bs
+         JOIN users u ON u.id = bs.user_id
+         ORDER BY bs.created_at DESC",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let pages = sqlx::query_as::<_, PageRow>(
+        "SELECT id, session_id, url, created_at FROM session_pages ORDER BY created_at ASC",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let result = sessions
+        .into_iter()
+        .map(|s| {
+            let session_pages = pages
+                .iter()
+                .filter(|p| p.session_id == s.id)
+                .map(|p| AdminPageResponse {
+                    id: p.id.clone(),
+                    url: p.url.clone(),
+                    created_at: p.created_at.clone(),
+                })
+                .collect();
+            AdminBrowsingSessionResponse {
+                id: s.id,
+                name: s.name,
+                created_at: s.created_at,
+                owner_email: s.owner_email,
+                pages: session_pages,
+            }
+        })
+        .collect();
+
+    Ok(Json(result))
+}
+
 #[derive(Debug, Serialize)]
 pub struct AdminDeviceSessionView {
     pub id: String,

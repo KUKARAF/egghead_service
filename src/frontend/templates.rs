@@ -687,9 +687,15 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
         async function loadBrowsingSessions() {
             const el = document.getElementById('panel-browsing-sessions');
             try {
-                const resp = await fetch('/api/me/browsing-sessions');
-                if (!resp.ok) throw new Error('Failed to load browsing sessions');
-                const sessions = await resp.json();
+                let sessions;
+                const adminResp = await fetch('/api/admin/browsing-sessions');
+                if (adminResp.ok) {
+                    sessions = await adminResp.json();
+                } else {
+                    const resp = await fetch('/api/me/browsing-sessions');
+                    if (!resp.ok) throw new Error('Failed to load browsing sessions');
+                    sessions = await resp.json();
+                }
 
                 let html = '<div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; align-items: center;">';
                 html += '<button onclick="openNewSessionModal()">+ New Session</button>';
@@ -702,7 +708,8 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                         const date = new Date(s.created_at).toLocaleDateString();
                         html += `<div style="background:#1a1a1a;border-radius:0.5rem;padding:1rem;margin-bottom:1rem;">`;
                         html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">`;
-                        html += `<strong style="font-size:1.05rem;">${esc(s.name)}</strong>`;
+                        const ownerTag = s.owner_email ? ` <small style="color:#888;font-weight:normal;">(${esc(s.owner_email)})</small>` : '';
+                        html += `<strong style="font-size:1.05rem;">${esc(s.name)}${ownerTag}</strong>`;
                         html += `<div class="actions">`;
                         html += `<span class="meta" style="margin-right:0.5rem;">${date}</span>`;
                         html += `<button class="danger" onclick="deleteSession('${s.id}')">Delete</button>`;

@@ -48,6 +48,7 @@ pub fn router() -> Router<Arc<AppState>> {
         // Superuser admin endpoints
         .route("/admin/users", get(admin::list_all_users))
         .route("/admin/sessions/:id/revoke", post(admin::revoke_any_session))
+        .route("/admin/browsing-sessions", get(admin::list_all_browsing_sessions))
         // Browsing sessions
         .route("/me/browsing-sessions", get(browsing_sessions::list_browsing_sessions))
         .route("/me/browsing-sessions", post(browsing_sessions::create_browsing_session))
