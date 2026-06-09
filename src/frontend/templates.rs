@@ -883,8 +883,28 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                 if (!resp.ok) throw new Error('Failed to load HTML');
                 const html = await resp.text();
                 const blob = new Blob([html], { type: 'text/html' });
-                const url = URL.createObjectURL(blob);
-                window.open(url, '_blank');
+                const blobUrl = URL.createObjectURL(blob);
+
+                const overlay = document.createElement('div');
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;flex-direction:column;';
+
+                const toolbar = document.createElement('div');
+                toolbar.style.cssText = 'padding:0.5rem 1rem;background:#1a1a1a;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid #333;';
+                toolbar.innerHTML = '<span style="color:#888;font-size:0.875rem;">Captured HTML preview</span>';
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'secondary';
+                closeBtn.textContent = 'Close';
+                closeBtn.onclick = () => { document.body.removeChild(overlay); URL.revokeObjectURL(blobUrl); };
+                toolbar.appendChild(closeBtn);
+
+                const iframe = document.createElement('iframe');
+                iframe.src = blobUrl;
+                iframe.style.cssText = 'flex:1;border:none;background:#fff;';
+                iframe.setAttribute('sandbox', 'allow-same-origin');
+
+                overlay.appendChild(toolbar);
+                overlay.appendChild(iframe);
+                document.body.appendChild(overlay);
             } catch (e) {
                 alert('Could not load HTML: ' + e.message);
             }
