@@ -11,6 +11,97 @@ use axum::{
 use serde::Serialize;
 use std::sync::Arc;
 
+// ── Error reports ────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct AdminSessionErrorResponse {
+    pub id: String,
+    pub session_id: String,
+    pub session_name: String,
+    pub url: String,
+    pub reported_at: String,
+    pub owner_email: String,
+}
+
+pub async fn list_admin_errors(
+    State(state): State<Arc<AppState>>,
+    SessionAuth(claims): SessionAuth,
+) -> Result<Json<Vec<AdminSessionErrorResponse>>, AppError> {
+    if !claims.is_superuser() {
+        return Err(AppError::Forbidden("superuser only".into()));
+    }
+
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        id: String,
+        session_id: String,
+        session_name: String,
+        url: String,
+        reported_at: String,
+        owner_email: String,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT se.id, se.session_id, bs.name AS session_name, se.url, se.reported_at, u.email AS owner_email
+         FROM session_errors se
+         JOIN browsing_sessions bs ON bs.id = se.session_id
+         JOIN users u ON u.id = bs.user_id
+         ORDER BY se.reported_at DESC
+         LIMIT 500",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| AdminSessionErrorResponse {
+                id: r.id,
+                session_id: r.session_id,
+                session_name: r.session_name,
+                url: r.url,
+                reported_at: r.reported_at,
+                owner_email: r.owner_email,
+            })
+            .collect(),
+    ))
+}
+
+pub async fn get_admin_error_html(
+    State(state): State<Arc<AppState>>,
+    SessionAuth(claims): SessionAuth,
+    Path(error_id): Path<String>,
+) -> Result<axum::response::Html<String>, AppError> {
+    if !claims.is_superuser() {
+        return Err(AppError::Forbidden("superuser only".into()));
+    }
+
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        url: String,
+        page_html: String,
+        reported_at: String,
+        owner_email: String,
+    }
+
+    let row = sqlx::query_as::<_, Row>(
+        "SELECT se.url, se.page_html, se.reported_at, u.email AS owner_email
+         FROM session_errors se
+         JOIN browsing_sessions bs ON bs.id = se.session_id
+         JOIN users u ON u.id = bs.user_id
+         WHERE se.id = ?",
+    )
+    .bind(&error_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    let wrapper = format!(
+        "<!-- Error report: {} ({}) at {} -->\n{}",
+        row.url, row.owner_email, row.reported_at, row.page_html
+    );
+    Ok(axum::response::Html(wrapper))
+}
+
 // ── Browsing sessions ────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]

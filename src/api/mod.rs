@@ -49,6 +49,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/admin/users", get(admin::list_all_users))
         .route("/admin/sessions/:id/revoke", post(admin::revoke_any_session))
         .route("/admin/browsing-sessions", get(admin::list_all_browsing_sessions))
+        .route("/admin/errors", get(admin::list_admin_errors))
+        .route("/admin/errors/:id", get(admin::get_admin_error_html))
         // Browsing sessions
         .route("/me/browsing-sessions", get(browsing_sessions::list_browsing_sessions))
         .route("/me/browsing-sessions", post(browsing_sessions::create_browsing_session))

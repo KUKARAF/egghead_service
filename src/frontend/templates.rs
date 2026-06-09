@@ -824,27 +824,40 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
         }
 
         // ---- Errors ----
+        let errorsAdminMode = false;
+
         async function loadErrors() {
             const el = document.getElementById('panel-errors');
             try {
-                const resp = await fetch('/api/me/errors');
-                if (!resp.ok) throw new Error('Failed to load errors');
-                const errors = await resp.json();
+                let errors;
+                const adminResp = await fetch('/api/admin/errors');
+                if (adminResp.ok) {
+                    errors = await adminResp.json();
+                    errorsAdminMode = true;
+                } else {
+                    const resp = await fetch('/api/me/errors');
+                    if (!resp.ok) throw new Error('Failed to load errors');
+                    errors = await resp.json();
+                    errorsAdminMode = false;
+                }
 
                 if (errors.length === 0) {
                     el.innerHTML = '<p class="empty">No error reports yet.</p>';
                     return;
                 }
 
-                let html = '<table><thead><tr><th>Session</th><th>URL</th><th>Reported</th><th>Actions</th></tr></thead><tbody>';
+                const showOwner = errorsAdminMode;
+                let html = '<table><thead><tr><th>Session</th>' + (showOwner ? '<th>Owner</th>' : '') + '<th>URL</th><th>Reported</th><th>Actions</th></tr></thead><tbody>';
                 for (const e of errors) {
                     const date = new Date(e.reported_at).toLocaleString();
+                    const adminFlag = errorsAdminMode ? 'true' : 'false';
                     html += `<tr>
                         <td>${esc(e.session_name)}</td>
+                        ${showOwner ? `<td class="meta">${esc(e.owner_email)}</td>` : ''}
                         <td style="font-family:monospace;font-size:0.875rem;word-break:break-all;">${esc(e.url)}</td>
                         <td class="meta">${date}</td>
                         <td class="actions">
-                            <button class="secondary" onclick="viewErrorHtml('${e.id}')">View HTML</button>
+                            <button class="secondary" onclick="viewErrorHtml('${e.id}', ${adminFlag})">View HTML</button>
                             <button class="danger" onclick="deleteError('${e.id}')">Delete</button>
                         </td>
                     </tr>`;
@@ -863,8 +876,18 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             else alert('Failed to delete error report');
         }
 
-        function viewErrorHtml(errorId) {
-            window.open(`/api/me/errors/${errorId}`, '_blank');
+        async function viewErrorHtml(errorId, isAdmin) {
+            const endpoint = isAdmin ? `/api/admin/errors/${errorId}` : `/api/me/errors/${errorId}`;
+            try {
+                const resp = await fetch(endpoint);
+                if (!resp.ok) throw new Error('Failed to load HTML');
+                const html = await resp.text();
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+            } catch (e) {
+                alert('Could not load HTML: ' + e.message);
+            }
         }
 
         // Initial load
