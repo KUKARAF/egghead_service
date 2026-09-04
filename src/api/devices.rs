@@ -39,7 +39,7 @@ pub async fn list_emojis() -> Response {
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::CACHE_CONTROL, "public, max-age=86400")
         .body(axum::body::Body::from(EMOJI_JSON))
-        .unwrap()
+        .unwrap_or_else(|_| Response::new(axum::body::Body::from(EMOJI_JSON)))
 }
 
 pub async fn register_device(

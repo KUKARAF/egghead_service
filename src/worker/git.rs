@@ -97,7 +97,9 @@ async fn put_file(
     });
 
     if let Some(sha) = sha {
-        body["sha"] = serde_json::json!(sha);
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("sha".to_string(), serde_json::json!(sha));
+        }
     }
 
     let resp = http

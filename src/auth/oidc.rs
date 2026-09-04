@@ -43,7 +43,10 @@ pub async fn init_client(
 }
 
 fn sign(payload: &str, key: &str) -> String {
-    let mut mac = HmacSha256::new_from_slice(key.as_bytes()).expect("HMAC accepts any key size");
+    let mut mac = match HmacSha256::new_from_slice(key.as_bytes()) {
+        Ok(mac) => mac,
+        Err(_) => return String::new(),
+    };
     mac.update(payload.as_bytes());
     URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
 }
@@ -71,9 +74,9 @@ fn decode_state_cookie(
         return None;
     }
     let v: serde_json::Value = serde_json::from_str(&payload).ok()?;
-    let state = v["state"].as_str()?.to_string();
-    let pkce_verifier = v["pkce_verifier"].as_str()?.to_string();
-    let nonce = v["nonce"].as_str()?.to_string();
+    let state = v.get("state").and_then(|x| x.as_str())?.to_string();
+    let pkce_verifier = v.get("pkce_verifier").and_then(|x| x.as_str())?.to_string();
+    let nonce = v.get("nonce").and_then(|x| x.as_str())?.to_string();
     Some((state, pkce_verifier, nonce))
 }
 

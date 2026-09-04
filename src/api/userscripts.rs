@@ -392,7 +392,7 @@ pub async fn refine_script(
             ));
         }
 
-        let total = chunks[0].total_chunks;
+        let total = chunks.first().map_or(0, |c| c.total_chunks);
         if chunks.len() as i64 != total {
             return Err(AppError::BadRequest(format!(
                 "incomplete upload: got {} of {} chunks",
