@@ -24,7 +24,7 @@ pub fn generate_emoji_sequence() -> String {
     let mut rng = rand::thread_rng();
     rand::seq::index::sample(&mut rng, EMOJI_POOL.len(), 3)
         .iter()
-        .map(|i| EMOJI_POOL[i])
+        .filter_map(|i| EMOJI_POOL.get(i).copied())
         .collect::<Vec<_>>()
         .join("")
 }

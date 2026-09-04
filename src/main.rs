@@ -110,14 +110,20 @@ async fn healthz(
             .status(StatusCode::OK)
             .header("content-type", "application/json")
             .body(Body::from(r#"{"status":"ok"}"#))
-            .unwrap(),
+            .unwrap_or_else(|_| Response::new(Body::from(r#"{"status":"ok"}"#))),
         Err(e) => {
             tracing::error!("health check DB error: {e}");
             Response::builder()
                 .status(StatusCode::SERVICE_UNAVAILABLE)
                 .header("content-type", "application/json")
                 .body(Body::from(r#"{"status":"degraded","reason":"db unreachable"}"#))
-                .unwrap()
+                .unwrap_or_else(|_| {
+                    let mut resp = Response::new(Body::from(
+                        r#"{"status":"degraded","reason":"db unreachable"}"#,
+                    ));
+                    *resp.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
+                    resp
+                })
         }
     }
 }
